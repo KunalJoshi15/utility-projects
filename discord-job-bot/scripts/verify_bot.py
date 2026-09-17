@@ -36,13 +36,10 @@ async def run_verification():
             discord_id="999888777",
             username="test_candidate",
             full_name="Jane Doe",
-            email="jane@example.com",
-            phone="+1-555-0100",
-            city="Bengaluru",
-            country="India",
             years_of_experience=6
         )
         assert user.full_name == "Jane Doe"
+        assert user.username == "test_candidate"
     print("  [PASS] Database initialization and user profile creation verified.")
 
     # 3. Test Gemini AI Resume Audit & Extraction

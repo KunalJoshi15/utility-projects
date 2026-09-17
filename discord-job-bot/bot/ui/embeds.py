@@ -282,9 +282,9 @@ def create_profile_embed(user: UserProfile) -> discord.Embed:
         color=COLOR_PRIMARY
     )
     
-    embed.add_field(name="📧 Email", value=f"`{user.email or 'Not configured'}`", inline=True)
-    embed.add_field(name="📱 Phone", value=f"`{user.phone or 'Not configured'}`", inline=True)
-    embed.add_field(name="📍 Location", value=f"`{user.city or ''}, {user.country or 'Not set'}`", inline=True)
+    embed.add_field(name="🏷️ Name", value=f"`{user.full_name or 'Not set'}`", inline=True)
+    embed.add_field(name="💬 Discord Username", value=f"`@{user.username or 'Unknown'}`", inline=True)
+    embed.add_field(name="🆔 Discord ID", value=f"`{user.discord_id}`", inline=True)
     
     embed.add_field(name="💼 Current Role", value=f"`{user.current_role or 'Not set'}` at `{user.current_company or 'N/A'}`", inline=False)
     embed.add_field(name="⏳ Experience", value=f"`{user.years_of_experience} years`", inline=True)
@@ -665,7 +665,7 @@ def create_help_embed() -> discord.Embed:
 
     embed.add_field(
         name="👤 Profile & Resume Commands",
-        value="• `/profile setup` - Set your full name, email, phone, and location\n"
+        value="• `/profile setup` - Set your candidate name (Discord username linked automatically)\n"
               "• `/profile companies <names>` - Save your target dream companies (Google, Microsoft, etc.)\n"
               "• `/profile resume` - Upload your PDF resume for auto-applications & AI review\n"
               "• `/profile details` - Set experience years, notice period, sponsorship\n"

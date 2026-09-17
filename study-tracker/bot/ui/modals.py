@@ -220,3 +220,62 @@ class QuizAnswerModal(discord.ui.Modal, title="Submit Interview Answer"):
         )
         embed = create_quiz_evaluation_embed(eval_data, self.answer.value.strip())
         await interaction.followup.send(embed=embed, ephemeral=True)
+
+class ScheduleAdjustModal(discord.ui.Modal, title="Adapt Study Schedule with AI"):
+    instructions = discord.ui.TextInput(
+        label="Instructions for Gemini AI",
+        placeholder="e.g. I only have 1 hour on weekdays and 4 hours on weekends. Prioritize K8s and LLD.",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1000
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        from services.schedule_service import schedule_service
+        from bot.ui.embeds import create_schedule_embed
+        async with get_db() as db:
+            plan = await schedule_service.adjust_schedule_with_ai(
+                db=db,
+                discord_id=str(interaction.user.id),
+                instruction=self.instructions.value.strip()
+            )
+
+        if plan:
+            embed = create_schedule_embed(plan, interaction.user.display_name or interaction.user.name)
+            await interaction.followup.send(
+                content="✅ **Study Schedule Adapted Successfully by Gemini AI!**",
+                embed=embed,
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send("⚠️ You do not have an active schedule yet. Run `/study schedule` first!", ephemeral=True)
+
+class PasteCurriculumModal(discord.ui.Modal, title="Paste Syllabus / Topic Outline"):
+    curriculum_text = discord.ui.TextInput(
+        label="Syllabus Text / Outline / Markdown",
+        placeholder="Paste your syllabus lines, markdown lists, JSON, or YAML here...",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=3500
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        from services.curriculum_service import curriculum_service
+        from bot.ui.embeds import create_topic_checklist_embed
+        async with get_db() as db:
+            items = await curriculum_service.parse_and_import_curriculum(
+                db=db,
+                discord_id=str(interaction.user.id),
+                content=self.curriculum_text.value.strip(),
+                source="TEXT_PASTE"
+            )
+            topics = await curriculum_service.get_user_topics(db, str(interaction.user.id))
+
+        embed = create_topic_checklist_embed(topics, display_name=interaction.user.display_name or interaction.user.name)
+        await interaction.followup.send(
+            content=f"🎉 **Ingested {len(items)} Syllabus Topics into your Roadmap!**",
+            embed=embed,
+            ephemeral=True
+        )

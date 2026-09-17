@@ -1,19 +1,39 @@
+import io
 import discord
 from typing import Optional
 from discord import app_commands
 from discord.ext import commands
 from database.db import get_db
+from database.models import UserStudyProfile
 from services.study_service import study_service
+from services.chart_service import chart_service
+from services.curriculum_service import curriculum_service
+from services.schedule_service import schedule_service
 from bot.ui.embeds import (
     create_progress_embed,
     create_streak_embed,
     create_roadmap_embed,
     create_resources_embed,
+    create_schedule_embed,
+    create_shared_schedules_embed,
+    create_topic_checklist_embed,
     COLOR_SUCCESS,
     COLOR_PRIMARY
 )
-from bot.ui.modals import QuickStudyLogModal, CreateGoalModal, AddResourceModal
+from bot.ui.modals import (
+    QuickStudyLogModal,
+    CreateGoalModal,
+    AddResourceModal,
+    ScheduleAdjustModal,
+    PasteCurriculumModal
+)
 from bot.ui.views import RoadmapSelectView
+
+TOPIC_STATUS_CHOICES = [
+    app_commands.Choice(name="✅ Completed", value="COMPLETED"),
+    app_commands.Choice(name="🔄 In Progress", value="IN_PROGRESS"),
+    app_commands.Choice(name="⬜ To-Do", value="TODO"),
+]
 
 CATEGORY_CHOICES = [
     app_commands.Choice(name="🧩 DSA (Data Structures & Algorithms)", value="DSA"),
@@ -300,6 +320,301 @@ class StudyCog(commands.GroupCog, group_name="study"):
                     f"• **Target Role:** `{profile.target_role}`\n"
                     f"• **Dream Companies:** `{profile.target_companies}`",
             embed=embed,
+            ephemeral=True
+        )
+
+    # -------------------------------------------------------------------------
+    # File Curriculum Ingestion & Topic Checklist
+    # -------------------------------------------------------------------------
+
+    @app_commands.command(name="import_plan", description="Upload a syllabus file (.md/.txt/.json/.yaml/.csv) or paste text to add topics to your roadmap")
+    @app_commands.describe(
+        file="Attach syllabus file (.md, .txt, .json, .yaml, .csv)",
+        text="Or paste syllabus/topic text directly"
+    )
+    async def import_curriculum_plan(
+        self,
+        interaction: discord.Interaction,
+        file: Optional[discord.Attachment] = None,
+        text: Optional[str] = None
+    ):
+        if not file and not text:
+            await interaction.response.send_modal(PasteCurriculumModal())
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        content = ""
+        filename = None
+
+        if file:
+            filename = file.filename
+            try:
+                raw_bytes = await file.read()
+                content = raw_bytes.decode("utf-8", errors="ignore")
+            except Exception as e:
+                await interaction.followup.send(f"❌ Failed to read attached file: {e}", ephemeral=True)
+                return
+        elif text:
+            content = text
+
+        async with get_db() as db:
+            items = await curriculum_service.parse_and_import_curriculum(
+                db=db,
+                discord_id=str(interaction.user.id),
+                content=content,
+                filename=filename,
+                source=filename or "DIRECT_INPUT"
+            )
+            topics = await curriculum_service.get_user_topics(db, str(interaction.user.id))
+
+        embed = create_topic_checklist_embed(topics, display_name=interaction.user.display_name or interaction.user.name)
+        await interaction.followup.send(
+            content=f"🎉 **Ingested `{len(items)}` Preparation Topics into your Roadmap!**",
+            embed=embed,
+            ephemeral=True
+        )
+
+    @app_commands.command(name="topic_toggle", description="Mark a syllabus topic as Completed, In Progress, or To-Do")
+    @app_commands.describe(
+        topic_name="Name or keyword of the topic to toggle",
+        status="Set explicit status (or leave blank to cycle TODO -> In Progress -> Completed)"
+    )
+    @app_commands.choices(status=TOPIC_STATUS_CHOICES)
+    async def toggle_topic(
+        self,
+        interaction: discord.Interaction,
+        topic_name: str,
+        status: Optional[app_commands.Choice[str]] = None
+    ):
+        await interaction.response.defer(ephemeral=True)
+        status_val = status.value if status else None
+
+        async with get_db() as db:
+            item = await curriculum_service.toggle_topic_status(
+                db=db,
+                discord_id=str(interaction.user.id),
+                topic_name=topic_name,
+                new_status=status_val
+            )
+            topics = await curriculum_service.get_user_topics(db, str(interaction.user.id))
+
+        if not item:
+            await interaction.followup.send(
+                f"❌ Topic matching `'{topic_name}'` was not found in your syllabus checklist. View all topics with `/study topic_list`.",
+                ephemeral=True
+            )
+            return
+
+        status_emoji = "✅ Completed" if item.status == "COMPLETED" else "🔄 In Progress" if item.status == "IN_PROGRESS" else "⬜ To-Do"
+        embed = create_topic_checklist_embed(topics, display_name=interaction.user.display_name or interaction.user.name)
+        await interaction.followup.send(
+            content=f"📌 Topic **'{item.topic_name}'** is now marked as **{status_emoji}**!",
+            embed=embed,
+            ephemeral=True
+        )
+
+    @app_commands.command(name="topic_list", description="View your interactive preparation syllabus checklist & completion status")
+    @app_commands.describe(category="Filter topics by category")
+    @app_commands.choices(category=CATEGORY_CHOICES)
+    async def list_topics(
+        self,
+        interaction: discord.Interaction,
+        category: Optional[app_commands.Choice[str]] = None
+    ):
+        await interaction.response.defer(ephemeral=False)
+        cat_val = category.value if category else None
+        async with get_db() as db:
+            topics = await curriculum_service.get_user_topics(db, str(interaction.user.id), category=cat_val)
+
+        embed = create_topic_checklist_embed(topics, category=cat_val, display_name=interaction.user.display_name or interaction.user.name)
+        await interaction.followup.send(embed=embed)
+
+    # -------------------------------------------------------------------------
+    # Target Exit Date Scheduling & Social Sharing
+    # -------------------------------------------------------------------------
+
+    @app_commands.command(name="schedule", description="View or generate your customized time-slotted study routine leading to target exit date")
+    @app_commands.describe(
+        user="View another candidate's study schedule (optional)",
+        target_exit_date="Set target exit / resignation date (e.g. '2026-12-31' or '90 Days')",
+        daily_slots="Configure daily study time slots (e.g. 'Morning: 7:00-8:30 AM, Evening: 8:30-10:00 PM')"
+    )
+    async def view_or_create_schedule(
+        self,
+        interaction: discord.Interaction,
+        user: Optional[discord.User] = None,
+        target_exit_date: Optional[str] = None,
+        daily_slots: Optional[str] = None
+    ):
+        await interaction.response.defer(ephemeral=False)
+        target_id = str(user.id) if user else str(interaction.user.id)
+        display_name = user.display_name if user else (interaction.user.display_name or interaction.user.name)
+
+        async with get_db() as db:
+            if not user and (target_exit_date or daily_slots):
+                plan = await schedule_service.create_or_generate_schedule(
+                    db=db,
+                    discord_id=target_id,
+                    author_name=display_name,
+                    target_exit_date=target_exit_date,
+                    daily_slots=daily_slots
+                )
+            else:
+                plan = await schedule_service.get_user_schedule(db, target_id)
+                if not plan and not user:
+                    plan = await schedule_service.create_or_generate_schedule(
+                        db=db,
+                        discord_id=target_id,
+                        author_name=display_name
+                    )
+
+        if not plan:
+            await interaction.followup.send(f"ℹ️ `{display_name}` has not generated a study schedule yet.", ephemeral=True)
+            return
+
+        embed = create_schedule_embed(plan, display_name)
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="schedule_adjust", description="Ask Gemini AI to adapt your study schedule based on your availability and priorities")
+    @app_commands.describe(instruction="Your instruction for Gemini AI (or leave blank to open interactive modal)")
+    async def adjust_schedule_cmd(self, interaction: discord.Interaction, instruction: Optional[str] = None):
+        if not instruction:
+            await interaction.response.send_modal(ScheduleAdjustModal())
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        async with get_db() as db:
+            plan = await schedule_service.adjust_schedule_with_ai(
+                db=db,
+                discord_id=str(interaction.user.id),
+                instruction=instruction.strip()
+            )
+
+        if plan:
+            embed = create_schedule_embed(plan, interaction.user.display_name or interaction.user.name)
+            await interaction.followup.send(
+                content="✅ **Study Schedule Adapted by Gemini AI!**",
+                embed=embed,
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send("⚠️ You do not have an active schedule yet. Run `/study schedule` first to create one!", ephemeral=True)
+
+    @app_commands.command(name="schedule_browse", description="Browse community-shared study schedules and exit timelines")
+    @app_commands.describe(query="Search by keyword or role (e.g. 'Senior Backend', 'Google', 'K8s')")
+    async def browse_schedules(self, interaction: discord.Interaction, query: Optional[str] = None):
+        await interaction.response.defer(ephemeral=False)
+        async with get_db() as db:
+            schedules = await schedule_service.get_public_schedules(db, query=query)
+
+        embed = create_shared_schedules_embed(schedules)
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="schedule_clone", description="Clone / fork a fellow candidate's study schedule into your profile")
+    @app_commands.describe(
+        schedule_id="ID of the schedule to clone",
+        custom_exit_date="Your personal target exit date (optional)"
+    )
+    async def clone_schedule_cmd(
+        self,
+        interaction: discord.Interaction,
+        schedule_id: int,
+        custom_exit_date: Optional[str] = None
+    ):
+        await interaction.response.defer(ephemeral=True)
+        async with get_db() as db:
+            cloned = await schedule_service.clone_schedule(
+                db=db,
+                schedule_id=schedule_id,
+                target_discord_id=str(interaction.user.id),
+                target_author_name=interaction.user.display_name or interaction.user.name,
+                custom_exit_date=custom_exit_date
+            )
+
+        if cloned:
+            embed = create_schedule_embed(cloned, interaction.user.display_name or interaction.user.name)
+            await interaction.followup.send(
+                content=f"🎉 **Schedule Cloned Successfully!** You can customize it anytime with `/study schedule_adjust`.",
+                embed=embed,
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send(f"❌ Schedule with ID `#{schedule_id}` not found.", ephemeral=True)
+
+    # -------------------------------------------------------------------------
+    # Graphical Progress Analytics
+    # -------------------------------------------------------------------------
+
+    @app_commands.command(name="chart", description="📈 Render a high-resolution dark-mode graphical progress analytics chart")
+    @app_commands.describe(user="View another candidate's analytics graph (optional)")
+    async def view_progress_chart(self, interaction: discord.Interaction, user: Optional[discord.User] = None):
+        await interaction.response.defer(ephemeral=False)
+        target_id = str(user.id) if user else str(interaction.user.id)
+        display_name = user.display_name if user else (interaction.user.display_name or interaction.user.name)
+
+        async with get_db() as db:
+            summary = await study_service.get_user_progress_summary(db, target_id)
+            recent_logs = summary.get("recent_topics", [])
+            # Map recent logs into daily entries format
+            daily_entries = [{"date": r["date"], "minutes": r["minutes"]} for r in recent_logs]
+            topic_stats = await curriculum_service.get_topic_stats(db, target_id)
+
+        chart_buffer = chart_service.generate_progress_chart(
+            display_name=display_name,
+            summary=summary,
+            daily_logs=daily_entries,
+            topic_stats=topic_stats
+        )
+
+        discord_file = discord.File(fp=chart_buffer, filename=f"progress_chart_{target_id}.png")
+        embed = discord.Embed(
+            title=f"📈 Preparation Analytics & Trajectory: {display_name}",
+            description=(
+                f"**Total Hours Studied:** `⏱️ {summary.get('total_hours', 0)}h` • "
+                f"**Problems Solved:** `🧩 {summary.get('total_problems', 0)}` • "
+                f"**Active Streak:** `🔥 {summary.get('streak', {}).get('current_streak', 0)} Days`"
+            ),
+            color=COLOR_PRIMARY
+        )
+        embed.set_image(url=f"attachment://progress_chart_{target_id}.png")
+        embed.set_footer(text="Study Tracker Bot • Matplotlib Analytics Engine")
+
+        await interaction.followup.send(embed=embed, file=discord_file)
+
+    # -------------------------------------------------------------------------
+    # Inactivity Reminders Configuration
+    # -------------------------------------------------------------------------
+
+    @app_commands.command(name="reminders", description="Configure daily streak protection and inactivity reminders")
+    @app_commands.describe(
+        enable="Enable or disable daily study reminder DMs",
+        hour_utc="UTC Hour for reminder delivery (default: 15 for 8:30 PM IST, 0-23)"
+    )
+    async def configure_reminders(
+        self,
+        interaction: discord.Interaction,
+        enable: bool,
+        hour_utc: Optional[int] = 15
+    ):
+        await interaction.response.defer(ephemeral=True)
+        h = max(0, min(23, hour_utc if hour_utc is not None else 15))
+
+        async with get_db() as db:
+            prof_res = await db.execute(select(UserStudyProfile).where(UserStudyProfile.discord_id == str(interaction.user.id)))
+            profile = prof_res.scalars().first()
+            if not profile:
+                profile = await study_service.get_or_create_profile(db, str(interaction.user.id), interaction.user.name)
+
+            profile.reminders_enabled = enable
+            profile.reminder_hour_utc = h
+            await db.commit()
+
+        status_text = "✅ **Enabled**" if enable else "❌ **Disabled**"
+        await interaction.followup.send(
+            f"⏰ **Daily Reminders Updated!**\n"
+            f"• **Status:** {status_text}\n"
+            f"• **Delivery Hour:** `{h}:00 UTC`\n"
+            f"You will receive a gentle motivational DM if you haven't logged your study session by this time.",
             ephemeral=True
         )
 

@@ -319,52 +319,186 @@ def create_resources_embed(resources: List[Dict[str, Any]], category: Optional[s
     embed.set_footer(text="Add your own favorite resources with /study resource_add or /study resource_modal")
     return embed
 
+def create_schedule_embed(plan_obj: Any, display_name: str) -> discord.Embed:
+    """Format candidate target exit schedule card."""
+    import json
+    data = {}
+    if hasattr(plan_obj, "schedule_json") and plan_obj.schedule_json:
+        try:
+            data = json.loads(plan_obj.schedule_json)
+        except Exception:
+            data = {}
+
+    exit_target = getattr(plan_obj, "target_exit_date", "Target Date") or "Upcoming"
+    title = getattr(plan_obj, "title", "Career Exit Study Schedule")
+
+    embed = discord.Embed(
+        title=f"📅 {title}",
+        description=(
+            f"**Candidate:** `{display_name}` • **Target Exit Timeline:** `🎯 {exit_target}`\n"
+            f"**Daily Slots:** `{getattr(plan_obj, 'daily_slots', 'Morning & Evening')}`\n"
+            f"**Clones/Forks:** `👥 {getattr(plan_obj, 'clones_count', 0)}`"
+        ),
+        color=COLOR_PRIMARY
+    )
+
+    # Daily Time Slots
+    slots = data.get("daily_time_slots", [])
+    if slots:
+        slot_lines = [f"• **{s.get('slot_name', 'Slot')}:** `{s.get('time')}` — *{s.get('purpose')}*" for s in slots]
+        embed.add_field(name="⏰ Daily Routine Time Slots", value="\n".join(slot_lines), inline=False)
+
+    # Weekly Milestones Breakdown
+    milestones = data.get("weekly_milestones", [])
+    for m in milestones[:5]:
+        val = (
+            f"• **Morning Slot:** {m.get('morning_focus')}\n"
+            f"• **Evening Slot:** {m.get('evening_focus')}\n"
+            f"• 🎯 **Milestone Deliverable:** *{m.get('weekly_deliverable')}*"
+        )
+        embed.add_field(
+            name=f"🗓️ Week {m.get('week_num')}: {m.get('phase_title')}",
+            value=val,
+            inline=False
+        )
+
+    # Exit Readiness Checklist
+    checklist = data.get("exit_readiness_checklist", [])
+    if checklist:
+        embed.add_field(
+            name="🏁 Pre-Resignation Exit Readiness Checklist",
+            value="\n".join([f"• [ ] {c}" for c in checklist[:4]]),
+            inline=False
+        )
+
+    embed.set_footer(text="Adjust schedule anytime with /study schedule_adjust • Fork with /study schedule_clone")
+    return embed
+
+def create_shared_schedules_embed(schedules: List[Any]) -> discord.Embed:
+    """Format community-shared study plans list."""
+    embed = discord.Embed(
+        title="🌐 Community Preparation Schedules & Roadmaps",
+        description="Browse, learn from, or clone/fork fellow candidates' study routines:",
+        color=COLOR_SUCCESS
+    )
+
+    if not schedules:
+        embed.description = "ℹ️ No public schedules found. Generate yours with `/study schedule`!"
+        return embed
+
+    for idx, s in enumerate(schedules[:8], 1):
+        field_value = (
+            f"• **Author:** `{s.author_name}` • **Exit Target:** `{s.target_exit_date}` • 👥 `{s.clones_count} Forks`\n"
+            f"• **Slots:** `{s.daily_slots}`\n"
+            f"• 📋 **Clone into your profile:** `/study schedule_clone schedule_id:{s.id}`"
+        )
+        embed.add_field(
+            name=f"{idx}. 📌 {s.title} (ID #{s.id})",
+            value=field_value,
+            inline=False
+        )
+
+    embed.set_footer(text="Clone any schedule with /study schedule_clone <id>")
+    return embed
+
+def create_topic_checklist_embed(topics: List[Any], category: Optional[str] = None, display_name: str = "Candidate") -> discord.Embed:
+    """Format user checklist of roadmap topics."""
+    import json
+    cat_title = f" ({category.upper()})" if category else ""
+    embed = discord.Embed(
+        title=f"📋 Topic Checklist & Syllabus Tracker: {display_name}{cat_title}",
+        description="Track and check off your preparation syllabus topics:",
+        color=COLOR_PRIMARY
+    )
+
+    if not topics:
+        embed.description = "ℹ️ No topics found in your checklist. Import syllabus files with `/study import_plan`!"
+        return embed
+
+    completed_count = sum(1 for t in topics if t.status == "COMPLETED")
+    in_prog_count = sum(1 for t in topics if t.status == "IN_PROGRESS")
+    total_count = len(topics)
+    pct = (completed_count / total_count) * 100.0 if total_count > 0 else 0
+
+    embed.description = f"**Status:** `{completed_count}/{total_count} Completed` ({pct:.0f}%) • `{in_prog_count} In Progress`"
+
+    status_icons = {
+        "COMPLETED": "✅ `[COMPLETED]`",
+        "IN_PROGRESS": "🔄 `[IN PROGRESS]`",
+        "TODO": "⬜ `[TODO]`"
+    }
+
+    for idx, t in enumerate(topics[:12], 1):
+        icon = status_icons.get(t.status, "⬜")
+        sub_list = []
+        if t.subtopics:
+            try:
+                parsed_subs = json.loads(t.subtopics)
+                if isinstance(parsed_subs, list):
+                    sub_list = parsed_subs[:3]
+            except Exception:
+                pass
+        subs_text = f" — *{', '.join(sub_list)}*" if sub_list else ""
+        embed.add_field(
+            name=f"{idx}. {icon} [{t.category}] {t.topic_name}",
+            value=f"• Toggle status: `/study topic_toggle topic_name:\"{t.topic_name}\"`{subs_text}",
+            inline=False
+        )
+
+    embed.set_footer(text="Import new topic files with /study import_plan • View graph with /study chart")
+    return embed
+
 def create_help_embed() -> discord.Embed:
     """Format Study Tracker Bot help documentation."""
     embed = discord.Embed(
         title="📚 Study Tracker & Interview Preparation Bot",
-        description="Track your interview preparation, build daily streaks, practice with AI interview coaches, and access structured DSA, LLD, HLD, and Microservices/K8s roadmaps.",
+        description="Track your interview preparation, build daily streaks, practice with AI interview coaches, customize time-slotted exit schedules, and view rich graphical analytics.",
         color=COLOR_PRIMARY
     )
 
     embed.add_field(
-        name="📝 Study Logging & Progress",
-        value="• `/study log <category> <topic> [problems] [minutes] [confidence] [notes]` - Log prep (DSA, LLD, HLD, Microservices, Core CS)\n"
+        name="📝 Study Logging & Scorecards",
+        value="• `/study log <category> <topic> [problems] [minutes] [confidence] [notes]` - Log study session\n"
               "• `/study quicklog` - Interactive popup modal for quick logging\n"
-              "• `/study progress [user]` - View visual progress scorecard, hours, and breakdown\n"
+              "• `/study progress [user]` - View visual progress scorecard & hours\n"
+              "• `/study chart [user]` - 📈 Render high-resolution graphical analytics image\n"
               "• `/study streak` - View active daily study streak & milestones\n"
-              "• `/study roadmap [category]` - Browse structured curriculum for DSA, LLD, HLD, Microservices (K8s), Core CS\n"
-              "• `/study goals` - Create & track personal preparation targets",
+              "• `/study roadmap [category]` - Browse curriculum for Microservices (K8s), DSA, LLD, HLD, Core CS",
         inline=False
     )
 
     embed.add_field(
-        name="📖 Learning Resources & Roadmaps",
-        value="• `/study resources [category] [topic]` - Browse curated and community learning resources\n"
-              "• `/study resource_add <category> <topic> <title> <url> [type]` - Submit a new prep resource/link\n"
-              "• `/study resource_modal` - Interactive form to share resources",
+        name="📁 File Curriculum Ingestion & Topic Checklists",
+        value="• `/study import_plan [file] [text]` - 📥 Ingest `.md`, `.txt`, `.json`, `.yaml`, or `.csv` files into your syllabus\n"
+              "• `/study topic_list [category]` - View your personal checklist of topics\n"
+              "• `/study topic_toggle <topic_name> [status]` - Toggle topic status (`TODO`, `IN_PROGRESS`, `COMPLETED`)",
         inline=False
     )
 
     embed.add_field(
-        name="⏱️ Pomodoro Focus Timer",
-        value="• `/study timer [duration] [task]` - Start a custom focus timer (e.g. 25m / 50m)\n"
-              "• `/study pomodoro` - 25-minute standard focus block with 1-click auto-logging",
+        name="🎯 Target Exit Scheduling & Social Cloning",
+        value="• `/study schedule [user]` - View current time-slotted study schedule and exit countdown\n"
+              "• `/study schedule_adjust <instruction>` - Prompt Gemini AI to dynamically update your schedule\n"
+              "• `/study schedule_browse [query]` - Browse shared community study schedules\n"
+              "• `/study schedule_clone <schedule_id>` - Clone/fork a peer's schedule into your profile\n"
+              "• `/study reminders <enable> [hour_utc]` - Daily inactivity reminder notifications to protect streaks",
+        inline=False
+    )
+
+    embed.add_field(
+        name="📖 Learning Resources & Focus Timer",
+        value="• `/study resources [category] [topic]` - Browse curated & community resources\n"
+              "• `/study resource_add <category> <topic> <title> <url>` - Submit a new prep resource/link\n"
+              "• `/study resource_modal` - Interactive form to share resources\n"
+              "• `/study timer [duration] [task]` / `/study pomodoro` - Focus timer with auto-logging",
         inline=False
     )
 
     embed.add_field(
         name="🤖 Gemini AI Interview Coach",
-        value="• `/study plan <role> <company> [weeks]` - Generate week-by-week study plan tailored to your target company\n"
-              "• `/study quiz <topic> [difficulty]` - Mock interview technical concept quiz with AI grading\n"
+        value="• `/study plan <role> <company> [weeks]` - Tailored preparation plan for dream companies\n"
+              "• `/study quiz <topic> [difficulty]` - Mock interview technical quiz with instant grading\n"
               "• `/study revise` - Spaced repetition queue of topics needing review",
-        inline=False
-    )
-
-    embed.add_field(
-        name="🏆 Community & Leaderboard",
-        value="• `/study leaderboard` - Server rankings by study hours & problems solved\n"
-              "• `/study profile [name] [target_role]` - Configure candidate profile with name (Discord ID auto-populated)",
         inline=False
     )
 

@@ -138,13 +138,6 @@ class ApplyService:
 
                     # Multi-step dialog handler (Phone / Resume / Next)
                     for step in range(5):
-                        # Fill phone if input exists
-                        phone_input = page.locator("input[id*='phoneNumber'], input[id*='phone-number']")
-                        if await phone_input.count() > 0 and user.phone:
-                            curr_val = await phone_input.first.input_value()
-                            if not curr_val:
-                                await phone_input.first.fill(user.phone)
-
                         # Handle resume upload file chooser
                         upload_input = page.locator("input[type='file']")
                         if await upload_input.count() > 0 and user.resume_file_path:
@@ -239,21 +232,6 @@ class ApplyService:
                 full_name_input = page.locator("input[name*='name']:not([name*='first']):not([name*='last']), input[id*='name']:not([id*='first']):not([id*='last'])")
                 if await full_name_input.count() > 0 and user.full_name:
                     await full_name_input.first.fill(user.full_name)
-
-                # Fill Email
-                email_input = page.locator("input[type='email'], input[name*='email'], input[id*='email']")
-                if await email_input.count() > 0 and user.email:
-                    await email_input.first.fill(user.email)
-
-                # Fill Phone
-                phone_input = page.locator("input[type='tel'], input[name*='phone'], input[id*='phone']")
-                if await phone_input.count() > 0 and user.phone:
-                    await phone_input.first.fill(user.phone)
-
-                # Fill LinkedIn URL
-                linkedin_input = page.locator("input[name*='linkedin'], input[id*='linkedin'], input[placeholder*='LinkedIn']")
-                if await linkedin_input.count() > 0 and user.linkedin_url:
-                    await linkedin_input.first.fill(user.linkedin_url)
 
                 # Upload Resume
                 resume_input = page.locator("input[type='file']")

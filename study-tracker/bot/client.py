@@ -4,6 +4,8 @@ from discord.ext import commands
 from config.settings import settings
 from database.db import init_db
 
+from services.reminder_service import reminder_service
+
 logger = logging.getLogger(__name__)
 
 INITIAL_EXTENSIONS = [
@@ -58,3 +60,7 @@ class StudyTrackerBot(commands.Bot):
             name="Interview Prep • /study log • /help"
         )
         await self.change_presence(status=discord.Status.online, activity=activity)
+        
+        # Start Daily Streak & Inactivity Reminder Service
+        reminder_service.start(self)
+

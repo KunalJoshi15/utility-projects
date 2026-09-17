@@ -14,7 +14,7 @@ class ProfileCog(commands.GroupCog, group_name="profile"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="setup", description="Configure your candidate profile with your name (Discord ID is auto-populated)")
+    @app_commands.command(name="setup", description="Configure your candidate profile with your name (Discord username is auto-linked)")
     @app_commands.describe(name="Your full name (optional - opens quick modal if omitted)")
     async def setup_profile(self, interaction: discord.Interaction, name: Optional[str] = None):
         if name:
@@ -29,7 +29,7 @@ class ProfileCog(commands.GroupCog, group_name="profile"):
                 embed = create_profile_embed(profile)
             await interaction.followup.send(
                 content=f"✅ **Profile Configured for {profile.full_name}!**\n"
-                        f"Your Discord User ID (`{interaction.user.id}`) has been linked automatically. Next, attach your resume with `/profile resume`.",
+                        f"Your Discord account (`@{interaction.user.name}`) has been linked automatically. Next, attach your resume with `/profile resume`.",
                 embed=embed,
                 ephemeral=True
             )

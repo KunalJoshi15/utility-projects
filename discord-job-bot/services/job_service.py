@@ -76,8 +76,8 @@ class JobService:
         profile_data = await gemini_service.extract_resume_profile(resume_text)
         role = profile_data.get("primary_role") or user.current_role or "Software Engineer"
         skills = profile_data.get("skills", [])
-        location = user.city or "Bengaluru"
-        country = user.country or "India"
+        location = "Bengaluru"
+        country = "India"
 
         jobs = await self.search_jobs(
             db=db,
@@ -110,8 +110,8 @@ class JobService:
             except Exception as e:
                 logger.warning(f"Note extracting resume for company matching: {e}")
 
-        location = user.city or "Bengaluru"
-        country = user.country or "India"
+        location = "Bengaluru"
+        country = "India"
 
         # Determine target companies list
         target_list: List[str] = []
@@ -150,8 +150,8 @@ class JobService:
         """Parse natural language description/prompt with Gemini AI and execute multi-platform search."""
         parsed = await gemini_service.parse_job_search_prompt(prompt_text)
         
-        country = parsed.get("detected_country") or (user.country if user else "India")
-        location = parsed.get("detected_location") or (user.city if user else None)
+        country = parsed.get("detected_country") or "India"
+        location = parsed.get("detected_location") or None
         query = parsed.get("clean_query") or parsed.get("primary_role", "Software Engineer")
         is_remote = parsed.get("is_remote", False)
         visa_sponsorship = parsed.get("visa_sponsorship", False) or (user.requires_sponsorship if user else False)

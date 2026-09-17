@@ -37,7 +37,7 @@ An advanced, multi-user Discord bot powered by **Python**, **discord.py**, **Goo
 | | `/alerts list` | View your active job alerts, schedules, batch limits, and delivery destinations |
 | | `/alerts delete <alert_id>` | Delete an active alert rule |
 | | `/alerts check` | Trigger an immediate manual scan of all active alerts |
-| **👤 Profile** | `/profile setup [name]` | Quick profile setup with your name (Discord ID is auto-populated) |
+| **👤 Profile** | `/profile setup [name]` | Quick profile setup with your name (Discord username linked automatically) |
 | | `/profile companies <names>` | Save your target dream companies (e.g. *Google, Microsoft, Amazon, Swiggy*) |
 | | `/profile resume <attachment>` | Upload candidate resume (PDF/DOCX) for auto-applications & AI review |
 | | `/profile details` | Set experience years, notice period, and sponsorship requirement |

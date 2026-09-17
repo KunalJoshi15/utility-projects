@@ -23,30 +23,41 @@ An intelligent Discord bot and tracking service powered by **Python**, **discord
      - **Communication & Service Mesh**: gRPC & Protobuf, Backend-For-Frontend (BFF), Service Mesh (Istio / Envoy), Circuit Breakers (Resilience4j).
      - **Observability & Distributed Tracing**: OpenTelemetry standard, Jaeger, Prometheus & Grafana, Centralized Logging (Loki/ELK).
 
-3. **📚 Preparation Resources Catalog & Community Sharing**:
+3. **📁 File-Based Curriculum & Plan Ingestion**:
+   - Ingest any syllabus file (`.md`, `.txt`, `.json`, `.yaml`, `.csv`) or paste curriculum outlines directly (`/study import_plan`).
+   - Gemini AI parses and categorizes topics automatically into your personal roadmap.
+   - **Topic Checklist & Progress**: Track individual topics as `TODO`, `IN_PROGRESS`, or `COMPLETED` (`/study topic_list`, `/study topic_toggle`).
+
+4. **🎯 Target Exit Date & Daily Schedule Engine**:
+   - Calculate structured daily/weekly timelines toward your target resignation/exit date (`/study schedule`).
+   - Allocates morning & evening study slots (*what, when, and how to study*).
+   - **🤖 Gemini AI Adaptation**: Modify your schedule anytime with natural language instructions (`/study schedule_adjust "I only have 1 hour on weekdays"`).
+   - **👥 Social Schedule Forking**: Browse peer schedules and clone them into your profile with adapted target dates (`/study schedule_browse`, `/study schedule_clone`).
+
+5. **📈 High-Resolution Graphical Progress Charts**:
+   - Generates sleek dark-mode multi-panel analytics graphs (`/study chart`):
+     - Daily study minutes (14-day history)
+     - Cumulative study hours growth trajectory
+     - Category distribution donut chart (Microservices, DSA, LLD, HLD, Core CS)
+     - Syllabus topic completion progress bar
+
+6. **⏰ Automated Inactivity & Streak Reminders**:
+   - Background notifier delivers motivational DM reminders if you haven't logged prep by your configured evening reminder time (`/study reminders`).
+
+7. **📚 Preparation Resources Catalog & Community Sharing**:
    - Built-in curated catalog of top industry guides (Kubernetes Official Docs, Microservices.io, Confluent Kafka, NeetCode 150, Striver's A2Z Sheet, Refactoring.Guru, System Design Primer).
-   - **Community Submissions**: Anyone can share high-quality documentation, articles, practice sheets, cheatsheets, and repos (`/study resource_add` or `/study resource_modal`).
-   - **Interactive Discovery & Upvoting**: Browse by domain/topic keyword (`/study resources`) and upvote the most helpful resources (`/study upvote`).
+   - **Community Submissions**: Share and upvote resources (`/study resource_add`, `/study resource_modal`, `/study upvote`).
 
-4. **📊 Visual Progress Scorecards & Analytics**:
-   - Comprehensive progress cards with visual progress bars (`[████████░░] 80%`), total study hours, weekly momentum, and category breakdowns.
-   - View your scorecard anytime with `/study progress`.
+8. **⏱️ Pomodoro Focus Timer**:
+   - Dedicated focus timer (25m / 50m / custom) with interactive Discord buttons (`Complete & Log Session`, `Cancel`) and automatic progress logging.
 
-5. **🔥 Daily Study Streaks**:
-   - Active daily streak tracking with milestone badges (7-day, 14-day, 30-day, 100-day).
-   - Milestone progression tracker (`/study streak`).
-
-6. **⏱️ Pomodoro Focus Timer**:
-   - Dedicated focus timer (25m / 50m / custom) with interactive Discord buttons (`Complete & Log Session`, `Cancel`).
-   - Automatically credits study hours directly upon completion.
-
-7. **🤖 Gemini AI Interview Coach**:
+9. **🤖 Gemini AI Interview Coach**:
    - **`/study plan <role> <company> [weeks]`**: Generates a tailored week-by-week study plan for your dream company.
    - **`/study quiz <topic> [difficulty]`**: Mock interview technical concept questions with immediate AI grading and ideal model answers.
-   - **`/study revise`**: Spaced repetition queue suggesting topics that need revision based on confidence ratings and time elapsed.
+   - **`/study revise`**: Spaced repetition queue suggesting topics that need revision.
 
-8. **🏆 Server Study Leaderboard**:
-   - Friendly server rankings by total study hours and problems solved (`/study leaderboard`).
+10. **🏆 Server Study Leaderboard**:
+    - Friendly server rankings by total study hours and problems solved (`/study leaderboard`).
 
 ---
 
@@ -54,15 +65,23 @@ An intelligent Discord bot and tracking service powered by **Python**, **discord
 
 | Category | Command | Description |
 |---|---|---|
-| **📝 Progress Tracking** | `/study log <category> <topic> [problems] [minutes] [confidence] [problem_name] [notes]` | Record a completed study session with stats |
+| **📝 Progress Tracking** | `/study log <category> <topic> [problems] [minutes] [confidence] [notes]` | Record a completed study session |
 | | `/study quicklog` | Interactive popup modal for quick session logging |
-| | `/study progress [user]` | View visual preparation scorecard & categorical breakdown |
+| | `/study progress [user]` | View visual preparation scorecard & breakdown |
+| | `/study chart [user]` | 📈 Render high-resolution graphical analytics image |
 | | `/study streak` | View active daily study streak & milestone badge |
-| | `/study roadmap [category]` | Browse structured curriculum for Microservices (K8s), DSA, LLD, HLD & Core CS |
+| | `/study roadmap [category]` | Browse curriculum for Microservices (K8s), DSA, LLD, HLD, Core CS |
 | | `/study goals` | View and track your preparation milestones |
-| | `/study goal_create` | Modal to create custom milestone targets |
 | | `/study profile [name] [target_role] [target_companies]` | Setup candidate profile (Discord ID auto-populated) |
-| **📚 Resource Catalog** | `/study resources [category] [topic]` | Browse curated and community learning resources & guides |
+| **📁 Syllabus & Topics** | `/study import_plan [file] [text]` | Ingest `.md`, `.txt`, `.json`, `.yaml`, or `.csv` files into your syllabus |
+| | `/study topic_list [category]` | View interactive checklist of preparation topics |
+| | `/study topic_toggle <topic_name> [status]` | Mark topic as Completed, In Progress, or To-Do |
+| **🎯 Exit Scheduling & Sharing** | `/study schedule [user] [target_exit_date] [daily_slots]` | View/generate time-slotted study routine toward target exit date |
+| | `/study schedule_adjust [instruction]` | Prompt Gemini AI to adapt your study schedule |
+| | `/study schedule_browse [query]` | Browse community-shared public study schedules |
+| | `/study schedule_clone <schedule_id> [exit_date]` | Clone/fork a peer's study schedule into your profile |
+| | `/study reminders <enable> [hour_utc]` | Configure daily inactivity reminder notifications |
+| **📚 Resource Catalog** | `/study resources [category] [topic]` | Browse curated and community learning resources |
 | | `/study resource_add <category> <topic> <title> <url> [type]` | Submit a valuable preparation resource/tool to the catalog |
 | | `/study resource_modal` | Interactive form popup to submit new resources |
 | | `/study upvote <resource_id>` | Upvote a helpful preparation resource |

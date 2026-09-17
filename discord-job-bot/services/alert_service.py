@@ -82,8 +82,8 @@ class AlertService:
         comp_list = [c.strip() for c in comp_str.split(",") if c.strip()]
         
         target_role = role or user.current_role or "Software Engineer"
-        target_country = country or user.country or "India"
-        target_loc = location or user.city or "Bengaluru"
+        target_country = country or getattr(user, "country", None) or "India"
+        target_loc = location or getattr(user, "city", None) or getattr(user, "location", None) or "Bengaluru"
         
         created_alerts = []
         for comp in comp_list:

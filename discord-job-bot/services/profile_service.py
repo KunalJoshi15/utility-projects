@@ -68,39 +68,19 @@ class ProfileService:
         discord_id: str,
         username: Optional[str] = None,
         full_name: Optional[str] = None,
-        email: Optional[str] = None,
-        phone: Optional[str] = None,
-        city: Optional[str] = None,
-        country: Optional[str] = None,
-        linkedin_url: Optional[str] = None,
-        portfolio_url: Optional[str] = None,
-        github_url: Optional[str] = None,
         current_role: Optional[str] = None,
         current_company: Optional[str] = None,
         years_of_experience: Optional[int] = None,
         notice_period_days: Optional[int] = None,
         requires_sponsorship: Optional[bool] = None,
         target_companies: Optional[str] = None,
+        **kwargs
     ) -> UserProfile:
         """Update fields for a user profile."""
         profile = await self.get_or_create_profile(db, discord_id, username or "User")
 
         if full_name is not None:
             profile.full_name = full_name
-        if email is not None:
-            profile.email = email
-        if phone is not None:
-            profile.phone = phone
-        if city is not None:
-            profile.city = city
-        if country is not None:
-            profile.country = country
-        if linkedin_url is not None:
-            profile.linkedin_url = linkedin_url
-        if portfolio_url is not None:
-            profile.portfolio_url = portfolio_url
-        if github_url is not None:
-            profile.github_url = github_url
         if current_role is not None:
             profile.current_role = current_role
         if current_company is not None:
@@ -113,6 +93,10 @@ class ProfileService:
             profile.requires_sponsorship = requires_sponsorship
         if target_companies is not None:
             profile.target_companies = target_companies
+
+        for k, v in kwargs.items():
+            if hasattr(profile, k) and v is not None:
+                setattr(profile, k, v)
 
         return profile
 

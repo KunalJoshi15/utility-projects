@@ -32,20 +32,16 @@ async def test_profile_service_crud_and_encryption(test_db: AsyncSession):
     assert user.discord_id == "123456789"
     assert user.username == "testuser"
 
-    # 2. Update Profile
+    # 2. Update Profile (Name & Career Details, No Personal Info)
     updated = await profile_svc.update_profile(
         db=test_db,
         discord_id="123456789",
         full_name="Alice Developer",
-        email="alice@example.com",
-        phone="+1234567890",
-        city="San Francisco",
-        country="USA",
         years_of_experience=5,
         notice_period_days=15
     )
     assert updated.full_name == "Alice Developer"
-    assert updated.email == "alice@example.com"
+    assert updated.username == "testuser"
     assert updated.years_of_experience == 5
 
     # 3. Test Cookie Encryption & Decryption

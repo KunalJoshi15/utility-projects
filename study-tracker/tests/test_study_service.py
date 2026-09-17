@@ -5,6 +5,10 @@ from database.models import Base
 from services.study_service import study_service, CURATED_ROADMAPS
 from services.gemini_coach_service import gemini_coach_service
 from services.pomodoro_service import pomodoro_service
+from services.curriculum_service import curriculum_service
+from services.schedule_service import schedule_service
+from services.chart_service import chart_service
+from services.reminder_service import reminder_service
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -245,4 +249,151 @@ async def test_seed_default_resources(test_db: AsyncSession):
     assert any("Kubernetes" in t for t in titles)
     assert any("Microservices" in t or "Patterns" in t for t in titles)
     assert any("Kafka" in t or "Distributed" in t for t in titles)
+
+@pytest.mark.asyncio
+async def test_curriculum_file_and_text_parsing(test_db: AsyncSession):
+    # Test Markdown/Text syllabus ingestion
+    markdown_syllabus = """
+# Kubernetes Core & Workloads
+- [ ] Pod Lifecycle & Probes
+- [ ] Deployments & Rollouts
+- [ ] Ingress & Services
+
+## Distributed Systems & Saga Pattern
+- Orchestration vs Choreography
+- Transactional Outbox Pattern
+
+3. Dynamic Programming
+- Coin Change II
+- Longest Increasing Subsequence
+"""
+    items = await curriculum_service.parse_and_import_curriculum(
+        db=test_db,
+        discord_id="user_curriculum_1",
+        content=markdown_syllabus,
+        filename="syllabus.md"
+    )
+    assert len(items) >= 3
+    
+    topics = await curriculum_service.get_user_topics(test_db, "user_curriculum_1")
+    assert len(topics) >= 3
+    
+    topic_names = [t.topic_name for t in topics]
+    assert any("Kubernetes" in name for name in topic_names)
+    assert any("Saga" in name or "Distributed" in name for name in topic_names)
+    assert any("Dynamic Programming" in name for name in topic_names)
+
+@pytest.mark.asyncio
+async def test_topic_toggle_and_checklist(test_db: AsyncSession):
+    # 1. Ingest topic
+    await curriculum_service.parse_and_import_curriculum(
+        db=test_db,
+        discord_id="user_toggle_1",
+        content="1. Kafka Partitioning & Event Sourcing\n2. SOLID Principles Machine Coding"
+    )
+
+    # 2. Check initial status (TODO)
+    stats_init = await curriculum_service.get_topic_stats(test_db, "user_toggle_1")
+    assert stats_init["TODO"] == 2
+    assert stats_init["COMPLETED"] == 0
+
+    # 3. Toggle to IN_PROGRESS
+    t1 = await curriculum_service.toggle_topic_status(test_db, "user_toggle_1", "Kafka")
+    assert t1.status == "IN_PROGRESS"
+
+    # 4. Toggle to COMPLETED
+    t2 = await curriculum_service.toggle_topic_status(test_db, "user_toggle_1", "Kafka")
+    assert t2.status == "COMPLETED"
+    assert t2.completed_at is not None
+
+    stats_done = await curriculum_service.get_topic_stats(test_db, "user_toggle_1")
+    assert stats_done["COMPLETED"] == 1
+    assert stats_done["TODO"] == 1
+
+@pytest.mark.asyncio
+async def test_schedule_creation_adaptation_and_forking(test_db: AsyncSession):
+    # 1. Create schedule with target exit date
+    plan = await schedule_service.create_or_generate_schedule(
+        db=test_db,
+        discord_id="user_schedule_author",
+        author_name="Alice Architect",
+        target_exit_date="2026-11-30",
+        daily_slots="Morning: 7:00-8:30 AM (DSA), Evening: 8:30-10:00 PM (K8s/LLD)",
+        title="90-Day Senior Backend Exit Sprint"
+    )
+    assert plan.id is not None
+    assert plan.target_exit_date == "2026-11-30"
+    assert plan.author_name == "Alice Architect"
+    assert plan.clones_count == 0
+
+    # 2. Browse public schedules
+    public_plans = await schedule_service.get_public_schedules(test_db)
+    assert len(public_plans) >= 1
+    assert public_plans[0].title == "90-Day Senior Backend Exit Sprint"
+
+    # 3. Clone / fork schedule into another user's profile
+    cloned = await schedule_service.clone_schedule(
+        db=test_db,
+        schedule_id=plan.id,
+        target_discord_id="user_schedule_cloner",
+        target_author_name="Bob Backend",
+        custom_exit_date="2026-12-31"
+    )
+    assert cloned.id is not None
+    assert cloned.discord_id == "user_schedule_cloner"
+    assert cloned.target_exit_date == "2026-12-31"
+    assert "Forked from Alice Architect" in cloned.title
+    assert plan.clones_count == 1
+
+    # 4. Adjust schedule with AI
+    adjusted = await schedule_service.adjust_schedule_with_ai(
+        db=test_db,
+        discord_id="user_schedule_cloner",
+        instruction="Allocate more weekend time for Kubernetes and Saga pattern"
+    )
+    assert adjusted is not None
+    assert adjusted.id == cloned.id
+
+def test_progress_chart_rendering():
+    summary_data = {
+        "total_hours": 12.5,
+        "total_problems": 28,
+        "categories": {
+            "MICROSERVICES": {"total_hours": 4.5, "problems_solved": 8},
+            "DSA": {"total_hours": 5.0, "problems_solved": 15},
+            "LLD": {"total_hours": 3.0, "problems_solved": 5}
+        }
+    }
+    daily_entries = [
+        {"date": "2026-09-10", "minutes": 60},
+        {"date": "2026-09-11", "minutes": 90},
+        {"date": "2026-09-12", "minutes": 45},
+        {"date": "2026-09-15", "minutes": 120}
+    ]
+    topic_stats = {"COMPLETED": 8, "IN_PROGRESS": 3, "TODO": 10}
+
+    buf = chart_service.generate_progress_chart(
+        display_name="Alex Dev",
+        summary=summary_data,
+        daily_logs=daily_entries,
+        topic_stats=topic_stats
+    )
+    assert buf is not None
+    raw_bytes = buf.getvalue()
+    assert len(raw_bytes) > 1000
+    # Verify PNG magic number header: \x89PNG\r\n\x1a\n
+    assert raw_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+
+@pytest.mark.asyncio
+async def test_reminder_service_logic(test_db: AsyncSession):
+    # Create profile with reminders enabled
+    prof = await study_service.get_or_create_profile(test_db, "user_remind_me", "john_coder", "John Coder")
+    prof.reminders_enabled = True
+    prof.reminder_hour_utc = 0
+    await test_db.commit()
+
+    # User has not studied today
+    streak = await study_service.get_streak_status(test_db, "user_remind_me")
+    assert streak["studied_today"] is False
+
 

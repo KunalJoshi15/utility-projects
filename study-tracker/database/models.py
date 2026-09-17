@@ -36,6 +36,10 @@ class UserStudyProfile(Base):
     target_role = Column(String(150), nullable=True, default="Software Engineer")
     target_companies = Column(String(255), nullable=True, default="Google, Microsoft, Amazon")
     target_interview_date = Column(String(50), nullable=True)
+    target_exit_date = Column(String(50), nullable=True)          # e.g. "2026-12-31" or "3 Months"
+    daily_study_slots = Column(String(255), nullable=True, default="Morning 7:30-9:00 AM, Evening 8:30-10:00 PM")
+    reminders_enabled = Column(Boolean, default=True)
+    reminder_hour_utc = Column(Integer, default=15)               # 15 UTC = 8:30 PM IST
     daily_goal_minutes = Column(Integer, default=120)
     daily_goal_problems = Column(Integer, default=3)
     
@@ -44,6 +48,8 @@ class UserStudyProfile(Base):
 
     logs = relationship("StudyLog", back_populates="user", cascade="all, delete-orphan")
     goals = relationship("StudyGoal", back_populates="user", cascade="all, delete-orphan")
+    topics = relationship("RoadmapTopicItem", back_populates="user", cascade="all, delete-orphan")
+    schedules = relationship("StudySchedulePlan", back_populates="user", cascade="all, delete-orphan")
 
 class StudyLog(Base):
     __tablename__ = "study_logs"
@@ -120,3 +126,37 @@ class StudyResource(Base):
     is_verified = Column(Boolean, default=True)
     upvotes = Column(Integer, default=1)
     created_at = Column(DateTime, default=get_utc_now)
+
+class RoadmapTopicItem(Base):
+    __tablename__ = "roadmap_topic_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    discord_id = Column(String(64), ForeignKey("user_study_profiles.discord_id"), nullable=False, index=True)
+    category = Column(String(50), nullable=False, default="CUSTOM", index=True)
+    topic_name = Column(String(200), nullable=False, index=True)
+    subtopics = Column(Text, nullable=True)                       # JSON array of subtopics / problem names
+    status = Column(String(30), default="TODO", index=True)       # TODO, IN_PROGRESS, COMPLETED
+    source = Column(String(50), default="FILE_UPLOAD")            # BUILTIN, FILE_UPLOAD, MANUAL, SHARED_SCHEDULE
+    order_index = Column(Integer, default=0)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=get_utc_now)
+
+    user = relationship("UserStudyProfile", back_populates="topics")
+
+class StudySchedulePlan(Base):
+    __tablename__ = "study_schedule_plans"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    discord_id = Column(String(64), ForeignKey("user_study_profiles.discord_id"), nullable=False, index=True)
+    author_name = Column(String(100), nullable=True, default="Candidate")
+    title = Column(String(200), nullable=False)
+    target_exit_date = Column(String(50), nullable=True)          # e.g. "2026-11-30" or "90-Day Exit"
+    daily_slots = Column(String(255), nullable=True, default="Morning: 7:30-9:00 AM, Evening: 8:30-10:00 PM")
+    schedule_json = Column(Text, nullable=False)                  # JSON structure of daily slots, topics & weekly breakdown
+    is_public = Column(Boolean, default=True, index=True)
+    cloned_from_id = Column(Integer, nullable=True)
+    clones_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=get_utc_now)
+    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now)
+
+    user = relationship("UserStudyProfile", back_populates="schedules")

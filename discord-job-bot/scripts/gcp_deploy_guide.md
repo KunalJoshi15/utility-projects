@@ -139,7 +139,7 @@ free -h
 | `/jobs apply <job_id>` | Headless browser auto-apply with screenshot proof |
 | `/resume review` | Gemini AI audit of your resume: flaws, ATS score & rewrites |
 | `/resume parse` | Auto-syncs your Discord profile from your resume text |
-| `/profile setup` | Configure contact info, links, and preferences |
+| `/profile setup` | Configure candidate name (Discord username linked automatically) |
 | `/profile resume` | Drag-and-drop resume PDF upload |
 | `/profile cookie` | Encrypted storage for LinkedIn session cookie |
 | `/applications list` | Application history and submission status |

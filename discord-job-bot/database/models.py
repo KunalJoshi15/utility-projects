@@ -39,11 +39,7 @@ class UserProfile(Base):
     email = Column(String(150), nullable=True)
     phone = Column(String(50), nullable=True)
     city = Column(String(100), nullable=True)
-    country = Column(String(100), nullable=True)
-    
-    linkedin_url = Column(String(255), nullable=True)
-    portfolio_url = Column(String(255), nullable=True)
-    github_url = Column(String(255), nullable=True)
+    country = Column(String(100), nullable=True, default="India")
     
     current_role = Column(String(150), nullable=True)
     current_company = Column(String(150), nullable=True)

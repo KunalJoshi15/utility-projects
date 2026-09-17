@@ -17,7 +17,7 @@ class ProfileSetupModal(discord.ui.Modal, title="Candidate Profile Setup"):
 
         if discord_user_label:
             self.discord_info = discord.ui.TextInput(
-                label="Discord User ID (Auto-Populated)",
+                label="Discord Account (Auto-Populated)",
                 default=discord_user_label,
                 required=False,
                 max_length=100
@@ -36,7 +36,7 @@ class ProfileSetupModal(discord.ui.Modal, title="Candidate Profile Setup"):
 
         await interaction.response.send_message(
             f"✅ **Profile Configured for {profile.full_name}!**\n"
-            f"Your Discord User ID (`{interaction.user.id}`) is linked. Next, upload your resume with `/profile resume`.",
+            f"Your Discord account (`@{interaction.user.name}`) is linked. Next, upload your resume with `/profile resume`.",
             embed=embed,
             ephemeral=True
         )
