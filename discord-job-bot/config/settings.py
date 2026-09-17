@@ -40,8 +40,8 @@ class Settings:
 
     # AI Model Configuration (APIENX Integration & Google Gemini)
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", None)
-    APIENX_API_KEY: Optional[str] = os.getenv("APIENX_API_KEY", os.getenv("GEMINI_API_KEY", None))
-    APIENX_BASE_URL: str = os.getenv("APIENX_BASE_URL", os.getenv("AI_BASE_URL", "https://api.apienx.com/v1"))
+    APIENX_API_KEY: Optional[str] = os.getenv("APIENX_API_KEY", os.getenv("APINEX_API_KEY", os.getenv("GEMINI_API_KEY", None)))
+    APIENX_BASE_URL: str = os.getenv("APIENX_BASE_URL", os.getenv("APINEX_BASE_URL", os.getenv("AI_BASE_URL", "https://api.apinex.bond/v1")))
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "free/gemini-3.8-flash")
     AI_PROVIDER: str = os.getenv("AI_PROVIDER", "apienx")
 
