@@ -165,3 +165,43 @@ def test_apply_type_detection():
     assert job_svc._determine_apply_type("https://boards.greenhouse.io/stripe/jobs/456", False) == ApplyType.ATS_PORTAL.value
     assert job_svc._determine_apply_type("https://jobs.lever.co/airbnb/789", False) == ApplyType.ATS_PORTAL.value
     assert job_svc._determine_apply_type("https://careers.google.com/jobs/123", False) == ApplyType.DIRECT_CAREER.value
+
+@pytest.mark.asyncio
+async def test_target_companies_profile_and_search_and_alerts(test_db: AsyncSession):
+    profile_svc = ProfileService()
+    job_svc = JobService()
+    alert_svc = AlertService()
+
+    # 1. Save target companies in profile
+    user = await profile_svc.set_target_companies(
+        db=test_db,
+        discord_id="999888777",
+        companies="Google, Microsoft, Amazon, Swiggy",
+        username="dev_user"
+    )
+    assert user.target_companies == "Google, Microsoft, Amazon, Swiggy"
+
+    # 2. Search vacancies for target companies
+    jobs = await job_svc.search_jobs_for_target_companies(
+        db=test_db,
+        user=user,
+        limit=10
+    )
+    assert len(jobs) > 0
+    assert any("Google" in j.title or "Microsoft" in j.title or "Amazon" in j.title for j in jobs)
+
+    # 3. Create batch company alerts
+    alerts = await alert_svc.create_company_alerts_for_user(
+        db=test_db,
+        discord_id="999888777",
+        channel_id="111222333",
+        role="Backend Engineer",
+        min_salary="₹ 30 LPA"
+    )
+    assert len(alerts) == 4
+    comp_names = [a.company for a in alerts]
+    assert "Google" in comp_names
+    assert "Microsoft" in comp_names
+    assert "Amazon" in comp_names
+    assert "Swiggy" in comp_names
+    assert alerts[0].min_salary == "₹ 30 LPA"

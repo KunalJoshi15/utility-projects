@@ -100,6 +100,70 @@ class AlertsCog(commands.GroupCog, group_name="alerts"):
         embed.set_footer(text="Manage alerts anytime with /alerts list or /alerts delete")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+    @app_commands.command(name="companies", description="Create automatic 15-min vacancy alerts for all your target dream companies")
+    @app_commands.describe(
+        custom_companies="Optional comma-separated companies (e.g. 'Google, Microsoft, Amazon, Swiggy')",
+        role="Target role (optional, defaults to profile role / 'Software Engineer')",
+        min_salary="Target minimum paygrade / salary (e.g. '₹ 25 LPA')",
+        location="Target city or region (e.g. 'Bengaluru', 'Pune')",
+        country="Target country (India, USA, UK, Canada, Germany, Remote)"
+    )
+    @app_commands.choices(
+        country=[
+            app_commands.Choice(name="🇮🇳 India", value="India"),
+            app_commands.Choice(name="🇺🇸 USA", value="USA"),
+            app_commands.Choice(name="🇬🇧 United Kingdom", value="UK"),
+            app_commands.Choice(name="🇨🇦 Canada", value="Canada"),
+            app_commands.Choice(name="🇩🇪 Germany", value="Germany"),
+            app_commands.Choice(name="🌐 Worldwide / Remote", value="Remote"),
+        ]
+    )
+    async def create_company_alerts(
+        self,
+        interaction: discord.Interaction,
+        custom_companies: Optional[str] = None,
+        role: Optional[str] = None,
+        min_salary: Optional[str] = None,
+        location: Optional[str] = None,
+        country: Optional[app_commands.Choice[str]] = None
+    ):
+        await interaction.response.defer(ephemeral=True)
+        country_val = country.value if country else "India"
+
+        async with get_db() as db:
+            alerts = await alert_service.create_company_alerts_for_user(
+                db=db,
+                discord_id=str(interaction.user.id),
+                channel_id=str(interaction.channel_id),
+                guild_id=str(interaction.guild_id) if interaction.guild_id else None,
+                companies=custom_companies,
+                role=role,
+                min_salary=min_salary,
+                country=country_val,
+                location=location
+            )
+
+        if not alerts:
+            await interaction.followup.send(
+                "⚠️ No target companies found. Please set them using `/profile companies names: Google, Microsoft, Amazon` first.",
+                ephemeral=True
+            )
+            return
+
+        company_names = ", ".join([f"`{a.company}`" for a in alerts])
+        embed = discord.Embed(
+            title=f"🔔 {len(alerts)} Target Company Job Alerts Created!",
+            description=f"The bot is now monitoring 24/7 for **{alerts[0].query}** vacancies at:\n{company_names}\n\n"
+                        f"Whenever new openings appear in **{location or 'India'}**, you will be **tagged in {interaction.channel.mention}**.",
+            color=COLOR_SUCCESS
+        )
+        if min_salary:
+            embed.add_field(name="💰 Target Payscale", value=f"`{min_salary}`", inline=True)
+        embed.add_field(name="⏱️ Polling Frequency", value="`Every 15 minutes` (Run `/alerts check` to test now)", inline=True)
+        embed.set_footer(text="Manage all alerts with /alerts list or /alerts delete")
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     @app_commands.command(name="check", description="Manually trigger an immediate scan for your active job alerts")
     async def check_alerts(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)

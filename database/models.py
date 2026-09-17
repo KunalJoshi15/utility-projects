@@ -54,6 +54,9 @@ class UserProfile(Base):
     resume_file_path = Column(String(500), nullable=True)
     resume_filename = Column(String(255), nullable=True)
     
+    # Target companies for personalized company vacancy tracking & alerts
+    target_companies = Column(Text, nullable=True)
+    
     # Encrypted session / credentials for automated applications
     linkedin_cookie_enc = Column(Text, nullable=True)
     

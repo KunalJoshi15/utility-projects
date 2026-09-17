@@ -148,6 +148,58 @@ class JobsCog(commands.GroupCog, group_name="jobs"):
             view=view
         )
 
+    @app_commands.command(name="companies", description="Search open vacancies across your target dream companies")
+    @app_commands.describe(custom_companies="Optional comma-separated companies (e.g. 'Google, Microsoft, Amazon')")
+    async def match_companies(self, interaction: discord.Interaction, custom_companies: Optional[str] = None):
+        await interaction.response.defer(ephemeral=False)
+
+        async with get_db() as db:
+            user = await profile_service.get_or_create_profile(
+                db=db,
+                discord_id=str(interaction.user.id),
+                username=interaction.user.name
+            )
+            
+            comp_list = None
+            if custom_companies:
+                comp_list = [c.strip() for c in custom_companies.split(",") if c.strip()]
+            elif user.target_companies:
+                comp_list = [c.strip() for c in user.target_companies.split(",") if c.strip()]
+
+            if not comp_list:
+                await interaction.followup.send(
+                    "⚠️ **No Target Companies Configured!**\n\n"
+                    "Configure them using `/profile companies names: Google, Microsoft, Amazon, Swiggy, Flipkart` "
+                    "or pass them directly here: `/jobs companies custom_companies: Google, Microsoft, Uber`.",
+                    ephemeral=True
+                )
+                return
+
+            jobs = await job_service.search_jobs_for_target_companies(
+                db=db,
+                user=user,
+                companies=comp_list,
+                limit=15
+            )
+
+        if not jobs:
+            await interaction.followup.send(
+                f"❌ No active vacancies found across **{', '.join(comp_list)}** right now. Try adding more companies with `/profile companies`.",
+                ephemeral=True
+            )
+            return
+
+        first_job = jobs[0]
+        embed = create_job_embed(first_job, 1, len(jobs))
+        view = JobPaginationView(jobs=jobs, user_id=str(interaction.user.id))
+
+        companies_text = ", ".join([f"`{c}`" for c in comp_list[:6]])
+        await interaction.followup.send(
+            content=f"🏢 **Live Vacancies in Your Target Dream Companies** ({companies_text}):",
+            embed=embed,
+            view=view
+        )
+
     @app_commands.command(name="view", description="View full job description and requirements by Job ID")
     @app_commands.describe(job_id="The unique ID of the job")
     async def view(self, interaction: discord.Interaction, job_id: str):

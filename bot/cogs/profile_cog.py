@@ -1,4 +1,5 @@
 import discord
+from typing import Optional
 from discord import app_commands
 from discord.ext import commands
 from database.db import get_db
@@ -60,6 +61,47 @@ class ProfileCog(commands.GroupCog, group_name="profile"):
                 content=f"❌ Failed to process resume upload: {str(e)}",
                 ephemeral=True
             )
+
+    @app_commands.command(name="companies", description="Set or view target dream companies to track vacancies and alerts for")
+    @app_commands.describe(names="Comma-separated list of target companies (e.g. 'Google, Microsoft, Amazon, Swiggy, Uber')")
+    async def setup_companies(self, interaction: discord.Interaction, names: Optional[str] = None):
+        await interaction.response.defer(ephemeral=True)
+        async with get_db() as db:
+            if names:
+                user = await profile_service.set_target_companies(
+                    db=db,
+                    discord_id=str(interaction.user.id),
+                    companies=names,
+                    username=interaction.user.name
+                )
+                await interaction.followup.send(
+                    f"✅ **Target Dream Companies Updated!**\n"
+                    f"🏢 Saved: `{user.target_companies}`\n\n"
+                    f"👉 **What you can do next:**\n"
+                    f"• Run `/jobs companies` to search for all open vacancies matching your profile across these companies\n"
+                    f"• Run `/alerts companies` to set up automated 15-min background vacancy alerts for them!",
+                    ephemeral=True
+                )
+            else:
+                user = await profile_service.get_or_create_profile(
+                    db=db,
+                    discord_id=str(interaction.user.id),
+                    username=interaction.user.name
+                )
+                if user.target_companies:
+                    await interaction.followup.send(
+                        f"🏢 **Your Current Target Companies:** `{user.target_companies}`\n\n"
+                        f"To update them, run: `/profile companies names: Google, Microsoft, Amazon, Swiggy`\n"
+                        f"To search vacancies now, run: `/jobs companies`\n"
+                        f"To set up auto-alerts, run: `/alerts companies`",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"⚠️ You haven't added any target companies yet!\n\n"
+                        f"Run `/profile companies names: Google, Microsoft, Amazon, Swiggy, Flipkart` to save your dream companies.",
+                        ephemeral=True
+                    )
 
     @app_commands.command(name="cookie", description="Securely store your LinkedIn session cookie for Easy Apply automation")
     async def setup_cookie(self, interaction: discord.Interaction):

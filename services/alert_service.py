@@ -49,6 +49,53 @@ class AlertService:
         await db.refresh(alert)
         return alert
 
+    async def create_company_alerts_for_user(
+        self,
+        db: AsyncSession,
+        discord_id: str,
+        channel_id: str,
+        guild_id: Optional[str] = None,
+        companies: Optional[str] = None,
+        role: Optional[str] = None,
+        min_salary: Optional[str] = None,
+        country: Optional[str] = "India",
+        location: Optional[str] = None
+    ) -> List[JobAlert]:
+        """Create separate alert monitors for each company configured in the candidate profile."""
+        from services.profile_service import profile_service
+        user = await profile_service.get_or_create_profile(db, discord_id, "User")
+        
+        comp_str = companies or user.target_companies or "Google, Microsoft, Amazon, Swiggy, Flipkart"
+        comp_list = [c.strip() for c in comp_str.split(",") if c.strip()]
+        
+        target_role = role or user.current_role or "Software Engineer"
+        target_country = country or user.country or "India"
+        target_loc = location or user.city or "Bengaluru"
+        
+        created_alerts = []
+        for comp in comp_list:
+            alert = JobAlert(
+                discord_id=str(discord_id),
+                guild_id=str(guild_id) if guild_id else None,
+                channel_id=str(channel_id),
+                query=target_role,
+                country=target_country,
+                location=target_loc,
+                company=comp,
+                employment_type="FULLTIME",
+                min_salary=min_salary,
+                is_active=True,
+                created_at=datetime.now(timezone.utc)
+            )
+            db.add(alert)
+            created_alerts.append(alert)
+            
+        await db.commit()
+        for a in created_alerts:
+            await db.refresh(a)
+            
+        return created_alerts
+
     async def get_user_alerts(self, db: AsyncSession, discord_id: str) -> List[JobAlert]:
         """Fetch all alerts configured by a specific user."""
         result = await db.execute(

@@ -165,10 +165,13 @@ def create_profile_embed(user: UserProfile) -> discord.Embed:
     resume_status = f"✅ `{user.resume_filename}`" if user.resume_file_path else "❌ No resume uploaded (use `/profile resume`)"
     embed.add_field(name="📄 Resume File", value=resume_status, inline=False)
     
+    companies_status = f"🏢 `{user.target_companies}`" if user.target_companies else "⚠️ None configured (use `/profile companies`)"
+    embed.add_field(name="🎯 Target Dream Companies", value=companies_status, inline=False)
+    
     cookie_status = "✅ Configured (Active)" if user.linkedin_cookie_enc else "⚠️ Not configured (Direct form only)"
     embed.add_field(name="⚡ LinkedIn Session Key", value=cookie_status, inline=False)
     
-    embed.set_footer(text="Update your details anytime with `/profile setup` or run `/resume review`.")
+    embed.set_footer(text="Update your details anytime with `/profile setup` or `/profile companies`.")
     return embed
 
 def create_application_result_embed(result: Dict[str, Any], job: CachedJob, user: UserProfile) -> discord.Embed:

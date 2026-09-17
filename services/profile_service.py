@@ -80,6 +80,7 @@ class ProfileService:
         years_of_experience: Optional[int] = None,
         notice_period_days: Optional[int] = None,
         requires_sponsorship: Optional[bool] = None,
+        target_companies: Optional[str] = None,
     ) -> UserProfile:
         """Update fields for a user profile."""
         profile = await self.get_or_create_profile(db, discord_id, username or "User")
@@ -110,7 +111,22 @@ class ProfileService:
             profile.notice_period_days = notice_period_days
         if requires_sponsorship is not None:
             profile.requires_sponsorship = requires_sponsorship
+        if target_companies is not None:
+            profile.target_companies = target_companies
 
+        return profile
+
+    async def set_target_companies(
+        self,
+        db: AsyncSession,
+        discord_id: str,
+        companies: str,
+        username: str = "User"
+    ) -> UserProfile:
+        """Set user's target companies list."""
+        profile = await self.get_or_create_profile(db, discord_id, username)
+        profile.target_companies = companies.strip()
+        await db.flush()
         return profile
 
     async def save_resume_file(

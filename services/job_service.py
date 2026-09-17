@@ -90,6 +90,54 @@ class JobService:
         )
         return jobs
 
+    async def search_jobs_for_target_companies(
+        self,
+        db: AsyncSession,
+        user: UserProfile,
+        companies: Optional[List[str]] = None,
+        limit: int = 15
+    ) -> List[CachedJob]:
+        """Search live vacancies specifically for user's target companies tailored to their profile & resume."""
+        role = user.current_role or "Software Engineer"
+        skills = []
+        if user.resume_file_path:
+            try:
+                resume_text = gemini_service.extract_text_from_file(user.resume_file_path)
+                profile_data = await gemini_service.extract_resume_profile(resume_text)
+                role = profile_data.get("primary_role") or role
+                skills = profile_data.get("skills", [])
+            except Exception as e:
+                logger.warning(f"Note extracting resume for company matching: {e}")
+
+        location = user.city or "Bengaluru"
+        country = user.country or "India"
+
+        # Determine target companies list
+        target_list: List[str] = []
+        if companies:
+            target_list = companies
+        elif user.target_companies:
+            target_list = [c.strip() for c in user.target_companies.split(",") if c.strip()]
+        else:
+            target_list = ["Google", "Microsoft", "Amazon", "Swiggy", "Flipkart"]
+
+        all_jobs: List[CachedJob] = []
+        for comp in target_list:
+            comp_jobs = await self.search_jobs(
+                db=db,
+                query=role,
+                country=country,
+                location=location,
+                company_filter=comp,
+                limit=2,
+                skills_filter=skills
+            )
+            all_jobs.extend(comp_jobs)
+            if len(all_jobs) >= limit:
+                break
+
+        return all_jobs[:limit]
+
     async def search_jobs(
         self,
         db: AsyncSession,

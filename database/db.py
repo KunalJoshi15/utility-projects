@@ -54,6 +54,14 @@ async def init_db() -> None:
                 if existing_job_cols and "country" not in existing_job_cols:
                     await conn.execute(text("ALTER TABLE cached_jobs ADD COLUMN country VARCHAR(100)"))
 
+                # Check user_profiles columns
+                profile_cols = await conn.execute(
+                    text("PRAGMA table_info(user_profiles)")
+                )
+                existing_profile_cols = [row[1] for row in profile_cols.fetchall()]
+                if existing_profile_cols and "target_companies" not in existing_profile_cols:
+                    await conn.execute(text("ALTER TABLE user_profiles ADD COLUMN target_companies TEXT"))
+
             except Exception as mig_err:
                 logger.debug(f"Migration note (skipped or already applied): {mig_err}")
 
