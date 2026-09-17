@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.db import get_db
 from database.models import JobAlert, AlertNotification, CachedJob, UserProfile
 from services.job_service import job_service
-from bot.ui.embeds import create_job_embed
+from bot.ui.embeds import create_job_embed, create_alert_digest_embed
 from bot.ui.views import JobDetailView
 
 logger = logging.getLogger(__name__)
@@ -27,8 +27,12 @@ class AlertService:
         employment_type: Optional[str] = "FULLTIME",
         min_salary: Optional[str] = None,
         visa_sponsorship: bool = False,
+        delivery_mode: str = "DM",
+        frequency_hours: int = 12,
+        max_jobs_per_run: int = 3,
+        preferred_hour_utc: Optional[int] = None
     ) -> JobAlert:
-        """Create a new job alert rule for a user."""
+        """Create a new job alert rule with timing, batch size, and anti-spam delivery preferences."""
         from services.profile_service import profile_service
         await profile_service.get_or_create_profile(db, discord_id, "User")
 
@@ -43,6 +47,10 @@ class AlertService:
             employment_type=employment_type.strip() if employment_type else "FULLTIME",
             min_salary=min_salary.strip() if min_salary else None,
             visa_sponsorship=visa_sponsorship,
+            delivery_mode=delivery_mode.upper() if delivery_mode in ("DM", "CHANNEL") else "DM",
+            frequency_hours=max(1, min(168, frequency_hours)),
+            max_jobs_per_run=max(1, min(10, max_jobs_per_run)),
+            preferred_hour_utc=preferred_hour_utc,
             is_active=True,
             created_at=datetime.now(timezone.utc)
         )
@@ -61,7 +69,10 @@ class AlertService:
         role: Optional[str] = None,
         min_salary: Optional[str] = None,
         country: Optional[str] = "India",
-        location: Optional[str] = None
+        location: Optional[str] = None,
+        delivery_mode: str = "DM",
+        frequency_hours: int = 12,
+        max_jobs_per_run: int = 3
     ) -> List[JobAlert]:
         """Create separate alert monitors for each company configured in the candidate profile."""
         from services.profile_service import profile_service
@@ -86,6 +97,9 @@ class AlertService:
                 company=comp,
                 employment_type="FULLTIME",
                 min_salary=min_salary,
+                delivery_mode=delivery_mode.upper() if delivery_mode in ("DM", "CHANNEL") else "DM",
+                frequency_hours=max(1, min(168, frequency_hours)),
+                max_jobs_per_run=max(1, min(10, max_jobs_per_run)),
                 is_active=True,
                 created_at=datetime.now(timezone.utc)
             )
@@ -97,6 +111,38 @@ class AlertService:
             await db.refresh(a)
             
         return created_alerts
+
+    async def update_alert_schedule(
+        self,
+        db: AsyncSession,
+        alert_id: int,
+        discord_id: str,
+        frequency_hours: Optional[int] = None,
+        max_jobs_per_run: Optional[int] = None,
+        delivery_mode: Optional[str] = None,
+        preferred_hour_utc: Optional[int] = None
+    ) -> Optional[JobAlert]:
+        """Update the frequency, batch quantity limit, and delivery destination for an alert."""
+        result = await db.execute(
+            select(JobAlert)
+            .where(JobAlert.id == alert_id, JobAlert.discord_id == str(discord_id))
+        )
+        alert = result.scalars().first()
+        if not alert:
+            return None
+
+        if frequency_hours is not None:
+            alert.frequency_hours = max(1, min(168, frequency_hours))
+        if max_jobs_per_run is not None:
+            alert.max_jobs_per_run = max(1, min(10, max_jobs_per_run))
+        if delivery_mode is not None and delivery_mode.upper() in ("DM", "CHANNEL"):
+            alert.delivery_mode = delivery_mode.upper()
+        if preferred_hour_utc is not None:
+            alert.preferred_hour_utc = max(0, min(23, preferred_hour_utc))
+
+        await db.commit()
+        await db.refresh(alert)
+        return alert
 
     async def get_user_alerts(self, db: AsyncSession, discord_id: str) -> List[JobAlert]:
         """Fetch all alerts configured by a specific user."""
@@ -120,9 +166,10 @@ class AlertService:
             return True
         return False
 
-    async def poll_active_alerts_and_notify(self, bot: discord.Client) -> int:
-        """Background daemon: checks for new jobs and pings users in their Discord channels."""
+    async def poll_active_alerts_and_notify(self, bot: discord.Client, force_all: bool = False) -> int:
+        """Background daemon: checks for new jobs and sends consolidated, anti-spam digests (via DM or Channel)."""
         notifications_sent = 0
+        now = datetime.now(timezone.utc)
         try:
             async with get_db() as db:
                 result = await db.execute(select(JobAlert).where(JobAlert.is_active == True))
@@ -130,17 +177,14 @@ class AlertService:
 
                 for alert in alerts:
                     try:
-                        channel = bot.get_channel(int(alert.channel_id))
-                        if not channel:
-                            try:
-                                channel = await bot.fetch_channel(int(alert.channel_id))
-                            except Exception:
-                                channel = None
+                        # 1. Timing & Frequency Gate Check (Anti-Spam)
+                        if not force_all and alert.last_triggered_at:
+                            elapsed_hours = (now - alert.last_triggered_at.replace(tzinfo=timezone.utc) if alert.last_triggered_at.tzinfo is None else (now - alert.last_triggered_at)).total_seconds() / 3600.0
+                            required_interval = alert.frequency_hours or 12
+                            if elapsed_hours < required_interval:
+                                continue  # Wait until next configured trigger cycle
 
-                        if not channel:
-                            continue
-
-                        # Search matching jobs strictly respecting country, location, employment_type, salary and visa sponsorship
+                        # 2. Search matching jobs strictly respecting criteria
                         matching_jobs = await job_service.search_jobs(
                             db=db,
                             query=alert.query,
@@ -150,54 +194,78 @@ class AlertService:
                             min_salary=alert.min_salary,
                             employment_type=alert.employment_type,
                             visa_sponsorship=bool(alert.visa_sponsorship),
-                            limit=4
+                            limit=12
                         )
 
+                        # 3. Filter out previously notified jobs
+                        unseen_jobs = []
                         for job in matching_jobs:
-                            # Check if already notified
                             seen = await db.execute(
                                 select(AlertNotification).where(
                                     AlertNotification.alert_id == alert.id,
                                     AlertNotification.job_id == job.job_id
                                 )
                             )
-                            if seen.scalars().first():
-                                continue  # Skip already sent jobs
+                            if not seen.scalars().first():
+                                unseen_jobs.append(job)
 
-                            # Record notification
+                        if not unseen_jobs:
+                            alert.last_triggered_at = now
+                            await db.commit()
+                            continue
+
+                        # 4. Limit to user's configured batch quantity
+                        batch_limit = alert.max_jobs_per_run or 3
+                        jobs_to_send = unseen_jobs[:batch_limit]
+
+                        # 5. Record notifications in DB
+                        for job in jobs_to_send:
                             notif = AlertNotification(
                                 alert_id=alert.id,
                                 job_id=job.job_id,
-                                notified_at=datetime.now(timezone.utc)
+                                notified_at=now
                             )
                             db.add(notif)
-                            await db.flush()
+                        await db.flush()
 
-                            # Send Discord notification tagging the user
-                            embed = create_job_embed(job, 1, 1)
-                            view = JobDetailView(job=job, user_id=alert.discord_id)
-                            
-                            criteria_text = f"**Role:** `{alert.query}` • **Country:** `{alert.country or 'India'}`"
-                            if alert.location:
-                                criteria_text += f" • **City:** `{alert.location}`"
-                            if alert.company:
-                                criteria_text += f" • **Company:** `{alert.company}`"
-                            if alert.min_salary:
-                                criteria_text += f" • **Salary:** `{alert.min_salary}`"
-                            if alert.employment_type:
-                                criteria_text += f" • **Type:** `{alert.employment_type}`"
-                            if alert.visa_sponsorship:
-                                criteria_text += " • `🛂 Visa Sponsorship`"
+                        # 6. Format single anti-spam consolidated digest embed
+                        digest_embed = create_alert_digest_embed(alert, jobs_to_send)
 
-                            await channel.send(
-                                content=f"🔔 <@{alert.discord_id}> **New Job Alert!** Found a matching opening ({criteria_text}):",
-                                embed=embed,
-                                view=view
-                            )
-                            notifications_sent += 1
-                            await asyncio.sleep(1)
+                        delivered = False
+                        # 7a. Deliver via Private DM (Zero public channel spam)
+                        if (alert.delivery_mode or "DM").upper() == "DM":
+                            try:
+                                user = bot.get_user(int(alert.discord_id))
+                                if not user:
+                                    user = await bot.fetch_user(int(alert.discord_id))
+                                if user:
+                                    await user.send(embed=digest_embed)
+                                    delivered = True
+                            except Exception as dm_err:
+                                logger.info(f"DM delivery failed for user {alert.discord_id} (DMs closed), falling back to channel: {dm_err}")
 
-                        await db.commit()
+                        # 7b. Deliver via Channel (or fallback if DM failed)
+                        if not delivered:
+                            channel = bot.get_channel(int(alert.channel_id))
+                            if not channel:
+                                try:
+                                    channel = await bot.fetch_channel(int(alert.channel_id))
+                                except Exception:
+                                    channel = None
+
+                            if channel:
+                                await channel.send(
+                                    content=f"🔔 <@{alert.discord_id}> **Job Alert Digest:** Found {len(jobs_to_send)} new matching openings:",
+                                    embed=digest_embed
+                                )
+                                delivered = True
+
+                        if delivered:
+                            notifications_sent += len(jobs_to_send)
+                            alert.last_triggered_at = now
+                            await db.commit()
+
+                        await asyncio.sleep(1)
 
                     except Exception as e:
                         logger.error(f"Error processing alert ID {alert.id}: {e}", exc_info=True)
@@ -208,3 +276,4 @@ class AlertService:
         return notifications_sent
 
 alert_service = AlertService()
+

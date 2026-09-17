@@ -77,7 +77,7 @@ async def test_job_service_live_url_generation(test_db: AsyncSession):
 async def test_alert_service_crud(test_db: AsyncSession):
     alert_svc = AlertService()
     
-    # Create Alert with all filters
+    # Create Alert with all filters including timing, batch limit and delivery mode
     alert = await alert_svc.create_alert(
         db=test_db,
         discord_id="123456789",
@@ -88,7 +88,10 @@ async def test_alert_service_crud(test_db: AsyncSession):
         location="Bengaluru",
         company="Google",
         employment_type="FULLTIME",
-        min_salary="₹ 35 LPA"
+        min_salary="₹ 35 LPA",
+        delivery_mode="DM",
+        frequency_hours=6,
+        max_jobs_per_run=5
     )
     assert alert.id is not None
     assert alert.query == "Senior Backend Engineer"
@@ -97,6 +100,22 @@ async def test_alert_service_crud(test_db: AsyncSession):
     assert alert.company == "Google"
     assert alert.employment_type == "FULLTIME"
     assert alert.min_salary == "₹ 35 LPA"
+    assert alert.delivery_mode == "DM"
+    assert alert.frequency_hours == 6
+    assert alert.max_jobs_per_run == 5
+
+    # Update Alert Schedule / Config
+    updated = await alert_svc.update_alert_schedule(
+        db=test_db,
+        alert_id=alert.id,
+        discord_id="123456789",
+        frequency_hours=24,
+        max_jobs_per_run=3,
+        delivery_mode="CHANNEL"
+    )
+    assert updated.frequency_hours == 24
+    assert updated.max_jobs_per_run == 3
+    assert updated.delivery_mode == "CHANNEL"
 
     # List alerts
     alerts = await alert_svc.get_user_alerts(test_db, "123456789")
@@ -104,12 +123,43 @@ async def test_alert_service_crud(test_db: AsyncSession):
     assert alerts[0].id == alert.id
     assert alerts[0].country == "India"
     assert alerts[0].min_salary == "₹ 35 LPA"
+    assert alerts[0].delivery_mode == "CHANNEL"
+    assert alerts[0].frequency_hours == 24
 
     # Delete alert
     deleted = await alert_svc.delete_alert(test_db, alert.id, "123456789")
     assert deleted is True
     remaining = await alert_svc.get_user_alerts(test_db, "123456789")
     assert len(remaining) == 0
+
+@pytest.mark.asyncio
+async def test_alert_digest_embed_generation(test_db: AsyncSession):
+    from bot.ui.embeds import create_alert_digest_embed
+    alert_svc = AlertService()
+    job_svc = JobService()
+
+    alert = await alert_svc.create_alert(
+        db=test_db,
+        discord_id="1122334455",
+        channel_id="9988776655",
+        guild_id="123",
+        query="Frontend Engineer",
+        country="India",
+        location="Bengaluru",
+        delivery_mode="DM",
+        frequency_hours=12,
+        max_jobs_per_run=3
+    )
+
+    jobs = await job_svc.search_jobs(test_db, query="Frontend Engineer", country="India", location="Bengaluru", limit=3)
+    assert len(jobs) > 0
+
+    embed = create_alert_digest_embed(alert, jobs)
+    assert "Job Alert Digest" in embed.title
+    assert "Frontend Engineer" in embed.title
+    assert len(embed.fields) == len(jobs)
+    assert any("Apply on" in f.value for f in embed.fields)
+    assert "Private DM" in embed.description
 
 @pytest.mark.asyncio
 async def test_job_service_country_isolation_india(test_db: AsyncSession):

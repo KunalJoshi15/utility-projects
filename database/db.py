@@ -47,6 +47,16 @@ async def init_db() -> None:
                         await conn.execute(text("ALTER TABLE job_alerts ADD COLUMN min_salary VARCHAR(100)"))
                     if "visa_sponsorship" not in existing_alert_cols:
                         await conn.execute(text("ALTER TABLE job_alerts ADD COLUMN visa_sponsorship BOOLEAN DEFAULT 0"))
+                    if "delivery_mode" not in existing_alert_cols:
+                        await conn.execute(text("ALTER TABLE job_alerts ADD COLUMN delivery_mode VARCHAR(20) DEFAULT 'DM'"))
+                    if "frequency_hours" not in existing_alert_cols:
+                        await conn.execute(text("ALTER TABLE job_alerts ADD COLUMN frequency_hours INTEGER DEFAULT 12"))
+                    if "max_jobs_per_run" not in existing_alert_cols:
+                        await conn.execute(text("ALTER TABLE job_alerts ADD COLUMN max_jobs_per_run INTEGER DEFAULT 3"))
+                    if "last_triggered_at" not in existing_alert_cols:
+                        await conn.execute(text("ALTER TABLE job_alerts ADD COLUMN last_triggered_at DATETIME"))
+                    if "preferred_hour_utc" not in existing_alert_cols:
+                        await conn.execute(text("ALTER TABLE job_alerts ADD COLUMN preferred_hour_utc INTEGER"))
                 
                 # Check cached_jobs columns
                 job_cols = await conn.execute(

@@ -124,6 +124,13 @@ class JobAlert(Base):
     min_salary = Column(String(100), nullable=True)
     visa_sponsorship = Column(Boolean, default=False)
     
+    # Timing, frequency & anti-spam settings
+    delivery_mode = Column(String(20), default="DM")       # "DM" (Direct Message / Anti-Spam) or "CHANNEL"
+    frequency_hours = Column(Integer, default=12)          # 1, 3, 6, 12, 24 hours
+    max_jobs_per_run = Column(Integer, default=3)          # Max jobs to bundle per alert digest (1 to 10)
+    last_triggered_at = Column(DateTime, nullable=True)    # Last time digest was dispatched
+    preferred_hour_utc = Column(Integer, nullable=True)    # Target UTC hour for daily digest (0-23)
+
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=get_utc_now)
 

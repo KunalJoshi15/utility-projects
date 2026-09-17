@@ -568,6 +568,48 @@ def create_visa_company_intel_embed(intel: Dict[str, Any]) -> discord.Embed:
     embed.set_footer(text="Always confirm specific role eligibility on the employer's official job description.")
     return embed
 
+def create_alert_digest_embed(alert, jobs: List[CachedJob], candidate_name: Optional[str] = None) -> discord.Embed:
+    """Format a clean, consolidated job alert digest embed to prevent spamming server channels."""
+    embed = discord.Embed(
+        title=f"🔔 Job Alert Digest: {alert.query}",
+        description=(
+            f"Here are the latest matching verified openings for your scheduled job monitor.\n"
+            f"**Target:** `{alert.query}` • **Country:** `{alert.country or 'India'}`"
+            f"{f' • **City:** `{alert.location}`' if alert.location else ''}"
+            f"{f' • **Company:** `{alert.company}`' if alert.company else ''}\n"
+            f"**Delivery Mode:** `{'Private DM 📬' if alert.delivery_mode == 'DM' else 'Channel Feed 📢'}` • "
+            f"**Frequency:** `Every {alert.frequency_hours} Hours` • **Jobs Found:** `{len(jobs)}`"
+        ),
+        color=COLOR_SUCCESS
+    )
+
+    for idx, job in enumerate(jobs, 1):
+        provider_name = job.provider.replace("_", " ").title()
+        benchmarks = salary_service.get_salary_benchmarks(job.title, job.company, job.country)
+        ab_url = benchmarks["ambitionbox"]["company_role_url"] if benchmarks["company"] else benchmarks["ambitionbox"]["market_role_url"]
+        gd_url = benchmarks["glassdoor"]["company_role_url"] if benchmarks["company"] else benchmarks["glassdoor"]["market_role_url"]
+
+        job_details = [
+            f"• 🏢 **{job.company or 'Tech Company'}** • 📍 `{job.location}` • 🕒 `{job.employment_type}`"
+        ]
+        if job.salary_range and job.salary_range.lower() not in ("competitive", "not disclosed", "none"):
+            job_details.append(f"• 💰 **Disclosed Pay:** `{job.salary_range}`")
+        if job.visa_sponsorship:
+            job_details.append(f"• 🛂 **Visa / Relocation:** `{job.visa_sponsorship}`")
+
+        job_details.append(
+            f"• 🔗 **[Apply on {provider_name}]({job.apply_url})** • [AmbitionBox Pay]({ab_url}) • [Glassdoor]({gd_url})"
+        )
+
+        embed.add_field(
+            name=f"{idx}. 💼 {job.title}",
+            value="\n".join(job_details),
+            inline=False
+        )
+
+    embed.set_footer(text=f"Alert #{alert.id} • Anti-Spam Protected • Customize with /alerts config id:{alert.id}")
+    return embed
+
 def create_help_embed() -> discord.Embed:
     """Format help instructions embed."""
     embed = discord.Embed(
@@ -604,10 +646,11 @@ def create_help_embed() -> discord.Embed:
     )
 
     embed.add_field(
-        name="🔔 Automated Job Alerts",
-        value="• `/alerts create <query> [location] [company] [min_salary] [visa_sponsorship]` - Get tagged when new jobs appear\n"
-              "• `/alerts companies [role] [min_salary]` - Batch create 24/7 alerts for all your dream companies\n"
-              "• `/alerts list` - View your active job alerts\n"
+        name="🔔 Automated Job Alerts & Anti-Spam Digests",
+        value="• `/alerts create <query> [frequency] [max_jobs] [delivery]` - Create custom job monitor (DM or Channel, 1h-24h)\n"
+              "• `/alerts config <alert_id> [frequency] [max_jobs] [delivery]` - Customize timing, frequency & batch size\n"
+              "• `/alerts companies [role] [frequency] [max_jobs]` - Batch create 24/7 alerts for all your dream companies\n"
+              "• `/alerts list` - View your active job alerts, schedules & limits\n"
               "• `/alerts delete <alert_id>` - Delete an alert rule",
         inline=False
     )

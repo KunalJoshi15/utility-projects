@@ -16,9 +16,12 @@ An advanced, multi-user Discord bot powered by **Python**, **discord.py**, **Goo
 
 | Category | Command | Description |
 |---|---|---|
-| **✨ Gemini AI** | `/resume review` | Deep AI critique of what's not good in your resume + Google XYZ bullet rewrites |
+| **✨ Gemini AI & Fit** | `/resume fit [job_id] [role] [description]` | Audit if your resume is a good fit for a job + ATS tailoring advice & Google XYZ tips |
+| | `/resume review` | Deep AI critique of what's not good in your resume + Google XYZ bullet rewrites |
 | | `/resume parse` | Auto-extract skills, tech stack, and role to update your candidate profile |
-| **🔍 Job Search** | `/jobs search <query> [country] [city] [type] [salary] [company] [visa_sponsorship] [remote]` | Search live listings across LinkedIn, Naukri, Relocate.me, and Google Jobs |
+| **🔍 Job Search** | `/jobs prompt <description>` | Search jobs by typing any natural language description or project tech stack |
+| | `/jobs describe` | Interactive modal to paste a job description or custom requirements |
+| | `/jobs search <query> [country] [city] [type] [salary] [company] [visa_sponsorship] [remote]` | Search live listings across LinkedIn, Naukri, Relocate.me, and Google Jobs |
 | | `/jobs match` | Find openings matching your uploaded resume |
 | | `/jobs companies [names]` | Search open vacancies across your target dream companies |
 | | `/jobs view <job_id>` | View complete job description, requirements & live links |
@@ -28,9 +31,10 @@ An advanced, multi-user Discord bot powered by **Python**, **discord.py**, **Goo
 | **🛂 Visa Sponsorship** | `/visa companies [country]` | Browse top verified employers offering visa sponsorship in Germany, UK, NL, Canada, USA, SG, UAE |
 | | `/visa jobs <role> [country]` | Search verified relocation & visa openings across Relocate.me, Landing.jobs & LinkedIn |
 | | `/visa policy <company>` | Check official visa sponsorship track record & public government registry status |
-| **🔔 24/7 Job Alerts** | `/alerts create <query> [country] [city] [company] [min_salary] [visa_sponsorship]` | Get tagged in your channel when new matching jobs appear |
-| | `/alerts companies [role] [min_salary]` | Batch create 24/7 alerts for all your target dream companies |
-| | `/alerts list` | View your active job alerts |
+| **🔔 Scheduled Job Alerts (Anti-Spam)** | `/alerts create <query> [frequency] [max_jobs] [delivery] [country] [city] [company] [salary]` | Create alert with custom frequency (1h-24h), batch size (1-10), and DM/channel delivery |
+| | `/alerts config <alert_id> [frequency] [max_jobs] [delivery]` | Update schedule timing, batch limits, and delivery mode on an existing alert |
+| | `/alerts companies [role] [frequency] [max_jobs] [delivery]` | Batch create alerts for all your dream companies with custom timing |
+| | `/alerts list` | View your active job alerts, schedules, batch limits, and delivery destinations |
 | | `/alerts delete <alert_id>` | Delete an active alert rule |
 | | `/alerts check` | Trigger an immediate manual scan of all active alerts |
 | **👤 Profile** | `/profile setup` | Interactive modal to configure contact info and location |
