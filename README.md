@@ -1,6 +1,6 @@
-# 🧰 Utility Projects
+# 🧰 Developer & Career Prep Projects
 
-A multi-project monorepo containing developer tools, automation bots, and utility scripts.
+A multi-project monorepo containing AI-powered Discord bots and developer productivity services.
 
 ---
 
@@ -8,6 +8,7 @@ A multi-project monorepo containing developer tools, automation bots, and utilit
 
 ```
 utility-projects/
+│
 ├── 📁 discord-job-bot/     # AI-powered Discord Job Search, Resume Review & Auto-Apply Bot
 │   ├── bot/                # Discord UI modals, views, embeds & cogs
 │   ├── config/             # Environment settings & configuration
@@ -18,10 +19,16 @@ utility-projects/
 │   ├── deploy_to_vm.bat    # 1-click VM deployment script
 │   └── README.md           # Full Discord Bot documentation & slash commands manual
 │
-├── 📁 utility-scripts/     # Automation scripts, scrapers & helper utilities
-│   └── README.md
+├── 📁 study-tracker/       # Interview Preparation, Progress & AI Coaching Bot
+│   ├── bot/                # UI embeds, modals, views & cogs (Study, Pomodoro, AI Coach)
+│   ├── config/             # Environment settings & configuration
+│   ├── database/           # Async models (Logs, Goals, Streaks, Pomodoro)
+│   ├── services/           # Study analytics, roadmaps & Gemini AI coach services
+│   ├── tests/              # Automated test suite
+│   ├── deploy_to_vm.bat    # 1-click VM deployment script
+│   └── README.md           # Full Study Tracker documentation & slash command guide
 │
-├── deploy_to_vm.bat        # Root convenience launcher to deploy discord-job-bot
+├── deploy_to_vm.bat        # Root deployment launcher for discord-job-bot
 └── README.md               # Repository overview
 ```
 
@@ -42,5 +49,13 @@ An advanced, multi-user Discord bot powered by **Python**, **discord.py**, **Goo
 
 ---
 
-### 2. [🛠️ Utility Scripts](./utility-scripts/README.md)
-Collection of standalone automation, data processing, and productivity tools.
+### 2. [📚 Study Tracker Bot](./study-tracker/README.md)
+A dedicated interview preparation and career progress tracking bot:
+- **📝 Study Logging & Roadmaps**: Log preparation across DSA, LLD, HLD, and Core CS with confidence scores & notes.
+- **📊 Visual Progress Scorecards**: Progress bars, weekly momentum, and hours breakdown (`/study progress`).
+- **🔥 Daily Study Streaks**: Daily streak tracking with milestone badges (`/study streak`).
+- **⏱️ Pomodoro Focus Timer**: 25m/custom study blocks with 1-click auto-logging (`/study timer`, `/study pomodoro`).
+- **🤖 Gemini AI Interview Coach**: AI weekly study plans, mock interview concept quizzes with grading, and spaced repetition revision queue (`/study plan`, `/study quiz`, `/study revise`).
+- **🏆 Server Study Leaderboard**: Track and compete with peers on preparation time and problems solved.
+
+👉 **[Read full Study Tracker documentation & slash command guide](./study-tracker/README.md)**
