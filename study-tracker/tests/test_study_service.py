@@ -397,3 +397,24 @@ async def test_reminder_service_logic(test_db: AsyncSession):
     assert streak["studied_today"] is False
 
 
+@pytest.mark.asyncio
+async def test_apienx_coach_json_parsing_and_model_call(monkeypatch):
+    from services.gemini_coach_service import GeminiCoachService
+    coach_svc = GeminiCoachService()
+
+    sample_plan = '```json\n{"plan_title": "Google Prep", "target_company": "Google", "target_role": "SDE 2", "total_weeks": 4, "weekly_breakdown": [{"week_number": 1, "focus_area": "Trees", "dsa_targets": ["LCA"], "lld_hld_targets": ["Design Logger"], "milestone_goal": "Master trees"}], "key_success_tips": ["Stay consistent"]}\n```'
+    parsed = coach_svc._clean_and_parse_json(sample_plan)
+    assert parsed is not None
+    assert parsed["plan_title"] == "Google Prep"
+    assert len(parsed["weekly_breakdown"]) == 1
+
+    async def mock_call(prompt):
+        return sample_plan
+
+    monkeypatch.setattr(coach_svc, "_call_ai_model", mock_call)
+    plan = await coach_svc.generate_study_plan("SDE 2", "Google", weeks_available=4)
+    assert plan["plan_title"] == "Google Prep"
+    assert plan["target_company"] == "Google"
+
+
+

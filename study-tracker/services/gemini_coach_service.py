@@ -1,8 +1,10 @@
 import os
 import json
 import logging
+import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
+import aiohttp
 from config.settings import settings
 from database.models import StudyLog
 
@@ -58,6 +60,9 @@ SAMPLE_QUIZZES = {
 class GeminiCoachService:
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
+        self.apienx_api_key = settings.APIENX_API_KEY
+        self.apienx_base_url = settings.APIENX_BASE_URL.rstrip('/') if settings.APIENX_BASE_URL else "https://api.apienx.com/v1"
+        self.ai_provider = settings.AI_PROVIDER.lower() if settings.AI_PROVIDER else "apienx"
         self.model_name = settings.GEMINI_MODEL
         self.client = None
         if _GENAI_AVAILABLE and self.api_key and "AIza" in self.api_key:
@@ -65,6 +70,75 @@ class GeminiCoachService:
                 self.client = genai.Client(api_key=self.api_key)
             except Exception as e:
                 logger.warning(f"Could not initialize GenAI client: {e}")
+
+    async def _call_ai_model(self, prompt: str) -> Optional[str]:
+        """Send prompt to APIENX OpenAI-compatible endpoint or Google GenAI SDK."""
+        # 1. Try APIENX if configured
+        if (self.ai_provider == "apienx" or self.apienx_api_key) and self.apienx_api_key:
+            url = f"{self.apienx_base_url}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {self.apienx_api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": self.model_name,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.2
+            }
+            try:
+                timeout = aiohttp.ClientTimeout(total=45)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(url, headers=headers, json=payload) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if "choices" in data and len(data["choices"]) > 0:
+                                return data["choices"][0]["message"]["content"]
+                            logger.warning(f"Unexpected response structure from APIENX: {data}")
+                        else:
+                            error_text = await resp.text()
+                            logger.warning(f"APIENX request failed with status {resp.status}: {error_text}")
+            except Exception as e:
+                logger.error(f"Error calling APIENX AI gateway: {e}")
+
+        # 2. Fallback to Google GenAI Client if available
+        if self.client:
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt
+                )
+                if response and hasattr(response, "text"):
+                    return response.text
+            except Exception as e:
+                logger.error(f"Error calling Google GenAI SDK: {e}")
+
+        return None
+
+    def _clean_and_parse_json(self, raw_text: str) -> Optional[Any]:
+        """Strip markdown fences and parse valid JSON from AI response."""
+        if not raw_text:
+            return None
+        text = raw_text.strip()
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+
+        match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except Exception as e:
+                logger.warning(f"Regex JSON extraction failed: {e}")
+
+        return None
 
     async def generate_study_plan(
         self,
@@ -99,20 +173,11 @@ class GeminiCoachService:
             f"}}"
         )
 
-        if self.client:
-            try:
-                response = self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt
-                )
-                text = response.text.strip()
-                if "```json" in text:
-                    text = text.split("```json")[1].split("```")[0].strip()
-                elif "```" in text:
-                    text = text.split("```")[1].split("```")[0].strip()
-                return json.loads(text)
-            except Exception as e:
-                logger.warning(f"Gemini study plan error, fallback: {e}")
+        raw_response = await self._call_ai_model(prompt)
+        if raw_response:
+            parsed = self._clean_and_parse_json(raw_response)
+            if isinstance(parsed, dict) and "weekly_breakdown" in parsed:
+                return parsed
 
         # Fallback structured plan
         weekly = []
@@ -162,20 +227,11 @@ class GeminiCoachService:
             f"}}"
         )
 
-        if self.client:
-            try:
-                response = self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt
-                )
-                text = response.text.strip()
-                if "```json" in text:
-                    text = text.split("```json")[1].split("```")[0].strip()
-                elif "```" in text:
-                    text = text.split("```")[1].split("```")[0].strip()
-                return json.loads(text)
-            except Exception as e:
-                logger.warning(f"Gemini quiz error, fallback: {e}")
+        raw_response = await self._call_ai_model(prompt)
+        if raw_response:
+            parsed = self._clean_and_parse_json(raw_response)
+            if isinstance(parsed, dict) and "question" in parsed:
+                return parsed
 
         # Fallback quiz from curated pool
         cat_key = category.upper() if category.upper() in SAMPLE_QUIZZES else "LLD"
@@ -208,20 +264,11 @@ class GeminiCoachService:
             f"}}"
         )
 
-        if self.client:
-            try:
-                response = self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt
-                )
-                text = response.text.strip()
-                if "```json" in text:
-                    text = text.split("```json")[1].split("```")[0].strip()
-                elif "```" in text:
-                    text = text.split("```")[1].split("```")[0].strip()
-                return json.loads(text)
-            except Exception as e:
-                logger.warning(f"Gemini evaluation error, fallback: {e}")
+        raw_response = await self._call_ai_model(prompt)
+        if raw_response:
+            parsed = self._clean_and_parse_json(raw_response)
+            if isinstance(parsed, dict) and "score" in parsed:
+                return parsed
 
         # Fallback heuristic evaluation
         ans_len = len(user_answer.strip())

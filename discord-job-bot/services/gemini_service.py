@@ -4,6 +4,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+import aiohttp
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -11,14 +12,86 @@ logger = logging.getLogger(__name__)
 class GeminiResumeService:
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
+        self.apienx_api_key = settings.APIENX_API_KEY
+        self.apienx_base_url = settings.APIENX_BASE_URL.rstrip('/') if settings.APIENX_BASE_URL else "https://api.apienx.com/v1"
+        self.ai_provider = settings.AI_PROVIDER.lower() if settings.AI_PROVIDER else "apienx"
         self.model_name = settings.GEMINI_MODEL
         self._client = None
-        if self.api_key:
+        if self.api_key and "AIza" in self.api_key:
             try:
                 from google import genai
                 self._client = genai.Client(api_key=self.api_key)
             except Exception as e:
                 logger.warning(f"Could not initialize Google GenAI client: {e}")
+
+    async def _call_ai_model(self, prompt: str) -> Optional[str]:
+        """Send prompt to APIENX OpenAI-compatible endpoint or Google GenAI SDK."""
+        # 1. Try APIENX if configured
+        if (self.ai_provider == "apienx" or self.apienx_api_key) and self.apienx_api_key:
+            url = f"{self.apienx_base_url}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {self.apienx_api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": self.model_name,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.2
+            }
+            try:
+                timeout = aiohttp.ClientTimeout(total=45)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(url, headers=headers, json=payload) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if "choices" in data and len(data["choices"]) > 0:
+                                return data["choices"][0]["message"]["content"]
+                            logger.warning(f"Unexpected response structure from APIENX: {data}")
+                        else:
+                            error_text = await resp.text()
+                            logger.warning(f"APIENX request failed with status {resp.status}: {error_text}")
+            except Exception as e:
+                logger.error(f"Error calling APIENX AI gateway: {e}")
+
+        # 2. Fallback to Google GenAI Client if available
+        if self._client and self.api_key:
+            try:
+                response = self._client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                )
+                if response and hasattr(response, "text"):
+                    return response.text
+            except Exception as e:
+                logger.error(f"Error calling Google GenAI SDK: {e}")
+
+        return None
+
+    def _clean_and_parse_json(self, raw_text: str) -> Optional[Any]:
+        """Strip markdown fences and parse valid JSON from AI response."""
+        if not raw_text:
+            return None
+        text = raw_text.strip()
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+
+        match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except Exception as e:
+                logger.warning(f"Regex JSON extraction failed: {e}")
+
+        return None
 
     def extract_text_from_file(self, file_path: str) -> str:
         """Extract text from PDF or text resume file."""
@@ -44,7 +117,7 @@ class GeminiResumeService:
                 return ""
 
     async def analyze_resume(self, resume_text: str) -> Dict[str, Any]:
-        """Deep critique and improvement audit using Google Gemini AI."""
+        """Deep critique and improvement audit using AI model."""
         if not resume_text or len(resume_text.strip()) < 50:
             return {
                 "ats_score": 30,
@@ -56,75 +129,58 @@ class GeminiResumeService:
                 "actionable_recommendations": ["Re-upload a detailed PDF resume with complete work experience."]
             }
 
-        # If Gemini API Key is available, invoke Gemini AI
-        if self._client and self.api_key:
-            try:
-                prompt = (
-                    "You are an elite Tech Career Coach and Senior Technical Recruiter. "
-                    "Critique the following candidate resume thoroughly. Identify what is NOT good, what is weak, "
-                    "what is missing, and how to improve it.\n\n"
-                    "Return ONLY a valid JSON object matching this schema:\n"
-                    "{\n"
-                    '  "ats_score": <int between 0 and 100>,\n'
-                    '  "summary_verdict": "<2 sentence honest executive summary>",\n'
-                    '  "strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],\n'
-                    '  "weaknesses_and_flaws": ["<weak area 1>", "<weak area 2>", "<weak area 3>"],\n'
-                    '  "missing_metrics": ["<missing metric / numbers example 1>", "<missing metric 2>"],\n'
-                    '  "bullet_point_improvements": [\n'
-                    '    {\n'
-                    '      "original": "<exact weak bullet from resume>",\n'
-                    '      "improved": "<high-impact rewrite using Google XYZ or STAR method with metrics>",\n'
-                    '      "reason": "<why the rewrite is much stronger>"\n'
-                    '    }\n'
-                    '  ],\n'
-                    '  "actionable_recommendations": ["<recommendation 1>", "<recommendation 2>", "<recommendation 3>"]\n'
-                    "}\n\n"
-                    f"Candidate Resume Content:\n{resume_text[:6000]}"
-                )
+        prompt = (
+            "You are an elite Tech Career Coach and Senior Technical Recruiter. "
+            "Critique the following candidate resume thoroughly. Identify what is NOT good, what is weak, "
+            "what is missing, and how to improve it.\n\n"
+            "Return ONLY a valid JSON object matching this schema:\n"
+            "{\n"
+            '  "ats_score": <int between 0 and 100>,\n'
+            '  "summary_verdict": "<2 sentence honest executive summary>",\n'
+            '  "strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],\n'
+            '  "weaknesses_and_flaws": ["<weak area 1>", "<weak area 2>", "<weak area 3>"],\n'
+            '  "missing_metrics": ["<missing metric / numbers example 1>", "<missing metric 2>"],\n'
+            '  "bullet_point_improvements": [\n'
+            '    {\n'
+            '      "original": "<exact weak bullet from resume>",\n'
+            '      "improved": "<high-impact rewrite using Google XYZ or STAR method with metrics>",\n'
+            '      "reason": "<why the rewrite is much stronger>"\n'
+            '    }\n'
+            '  ],\n'
+            '  "actionable_recommendations": ["<recommendation 1>", "<recommendation 2>", "<recommendation 3>"]\n'
+            "}\n\n"
+            f"Candidate Resume Content:\n{resume_text[:6000]}"
+        )
 
-                response = self._client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                )
-                
-                raw_text = response.text.strip()
-                # Clean markdown codeblocks if wrapped in ```json ... ```
-                cleaned = re.sub(r"^```json\s*", "", raw_text)
-                cleaned = re.sub(r"```$", "", cleaned).strip()
-                parsed = json.loads(cleaned)
+        raw_response = await self._call_ai_model(prompt)
+        if raw_response:
+            parsed = self._clean_and_parse_json(raw_response)
+            if isinstance(parsed, dict) and "ats_score" in parsed:
                 return parsed
-
-            except Exception as e:
-                logger.error(f"Error calling Gemini AI API for resume analysis: {e}", exc_info=True)
 
         # Intelligent heuristic fallback analysis
         return self._heuristic_resume_analysis(resume_text)
 
     async def extract_resume_profile(self, resume_text: str) -> Dict[str, Any]:
         """Extract candidate skills, target roles, and experience from resume text."""
-        if self._client and self.api_key and resume_text:
-            try:
-                prompt = (
-                    "Extract structured candidate profile information from this resume. "
-                    "Return ONLY a valid JSON object matching this schema:\n"
-                    "{\n"
-                    '  "primary_role": "<e.g. Senior Backend Engineer>",\n'
-                    '  "skills": ["<skill1>", "<skill2>", "<skill3>", "<skill4>", "<skill5>"],\n'
-                    '  "years_of_experience": <integer>,\n'
-                    '  "suggested_locations": ["<location1>", "<location2>"],\n'
-                    '  "companies": ["<company1>", "<company2>"]\n'
-                    "}\n\n"
-                    f"Resume:\n{resume_text[:4000]}"
-                )
-                response = self._client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                )
-                cleaned = re.sub(r"^```json\s*", "", response.text.strip())
-                cleaned = re.sub(r"```$", "", cleaned).strip()
-                return json.loads(cleaned)
-            except Exception as e:
-                logger.warning(f"Gemini profile extraction fallback: {e}")
+        if resume_text and len(resume_text.strip()) >= 20:
+            prompt = (
+                "Extract structured candidate profile information from this resume. "
+                "Return ONLY a valid JSON object matching this schema:\n"
+                "{\n"
+                '  "primary_role": "<e.g. Senior Backend Engineer>",\n'
+                '  "skills": ["<skill1>", "<skill2>", "<skill3>", "<skill4>", "<skill5>"],\n'
+                '  "years_of_experience": <integer>,\n'
+                '  "suggested_locations": ["<location1>", "<location2>"],\n'
+                '  "companies": ["<company1>", "<company2>"]\n'
+                "}\n\n"
+                f"Resume:\n{resume_text[:4000]}"
+            )
+            raw_response = await self._call_ai_model(prompt)
+            if raw_response:
+                parsed = self._clean_and_parse_json(raw_response)
+                if isinstance(parsed, dict) and "skills" in parsed:
+                    return parsed
 
         # Heuristic profile extractor
         return self._heuristic_extract_profile(resume_text)
@@ -231,35 +287,29 @@ class GeminiResumeService:
                 "summary_intent": "General software engineering openings."
             }
 
-        if self._client and self.api_key:
-            try:
-                prompt = (
-                    "You are a talent search AI. Convert the following candidate job search prompt / description "
-                    "into structured technical search parameters. Extract the core role, technologies, location, "
-                    "remote preference, and visa requirement.\n\n"
-                    "Return ONLY a valid JSON object matching this schema:\n"
-                    "{\n"
-                    '  "primary_role": "<e.g. Backend Engineer, Frontend Developer, Data Engineer>",\n'
-                    '  "technologies": ["<tech 1>", "<tech 2>", "<tech 3>"],\n'
-                    '  "seniority": "<Junior / Mid / Senior / Lead>",\n'
-                    '  "clean_query": "<concise search query term with role and top 2 key tech>",\n'
-                    '  "detected_location": "<city name if mentioned, otherwise null>",\n'
-                    '  "detected_country": "<country name if mentioned or implied (e.g. India, Germany, UK, USA, Remote)>",\n'
-                    '  "is_remote": <boolean>,\n'
-                    '  "visa_sponsorship": <boolean>,\n'
-                    '  "summary_intent": "<1 sentence clean summary of what user wants>"\n'
-                    "}\n\n"
-                    f"User Prompt:\n{prompt_text[:2000]}"
-                )
-                response = self._client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                )
-                cleaned = re.sub(r"^```json\s*", "", response.text.strip())
-                cleaned = re.sub(r"```$", "", cleaned).strip()
-                return json.loads(cleaned)
-            except Exception as e:
-                logger.warning(f"Gemini prompt parsing fallback: {e}")
+        prompt = (
+            "You are a talent search AI. Convert the following candidate job search prompt / description "
+            "into structured technical search parameters. Extract the core role, technologies, location, "
+            "remote preference, and visa requirement.\n\n"
+            "Return ONLY a valid JSON object matching this schema:\n"
+            "{\n"
+            '  "primary_role": "<e.g. Backend Engineer, Frontend Developer, Data Engineer>",\n'
+            '  "technologies": ["<tech 1>", "<tech 2>", "<tech 3>"],\n'
+            '  "seniority": "<Junior / Mid / Senior / Lead>",\n'
+            '  "clean_query": "<concise search query term with role and top 2 key tech>",\n'
+            '  "detected_location": "<city name if mentioned, otherwise null>",\n'
+            '  "detected_country": "<country name if mentioned or implied (e.g. India, Germany, UK, USA, Remote)>",\n'
+            '  "is_remote": <boolean>,\n'
+            '  "visa_sponsorship": <boolean>,\n'
+            '  "summary_intent": "<1 sentence clean summary of what user wants>"\n'
+            "}\n\n"
+            f"User Prompt:\n{prompt_text[:2000]}"
+        )
+        raw_response = await self._call_ai_model(prompt)
+        if raw_response:
+            parsed = self._clean_and_parse_json(raw_response)
+            if isinstance(parsed, dict) and "primary_role" in parsed:
+                return parsed
 
         # Heuristic prompt parser
         return self._heuristic_parse_prompt(prompt_text)
@@ -367,43 +417,37 @@ class GeminiResumeService:
 
         job_desc = job_description or f"Opening for {target_role} at {company or 'Target Company'}."
 
-        if self._client and self.api_key:
-            try:
-                prompt = (
-                    "You are a Senior Technical Hiring Manager and Applicant Tracking System (ATS) Expert. "
-                    "Evaluate how well the candidate's resume fits the target job opening.\n\n"
-                    f"Target Role: {target_role}\n"
-                    f"Target Company: {company or 'Not specified'}\n"
-                    f"Job Description & Requirements:\n{job_desc[:3000]}\n\n"
-                    f"Candidate Resume Content:\n{resume_text[:5000]}\n\n"
-                    "Return ONLY a valid JSON object matching this schema:\n"
-                    "{\n"
-                    '  "fit_score": <int between 0 and 100>,\n'
-                    '  "verdict": "<e.g. 🔥 Strong Fit (Ready to Apply) / ⚠️ Moderate Fit (Tailoring Recommended) / ❌ Significant Skill Gaps>",\n'
-                    '  "target_role": "' + target_role + '",\n'
-                    '  "target_company": "' + (company or "N/A") + '",\n'
-                    '  "matching_skills": ["<matching tech/skill 1>", "<matching skill 2>", "<matching skill 3>"],\n'
-                    '  "missing_skills_and_gaps": ["<critical required skill missing on resume 1>", "<missing skill 2>"],\n'
-                    '  "seniority_alignment": "<1-2 sentences on whether candidate experience matches the role level>",\n'
-                    '  "bullet_tailoring_tips": [\n'
-                    '    {\n'
-                    '      "section": "<e.g. Experience / Projects>",\n'
-                    '      "advice": "<specific advice on what to highlight for this job>",\n'
-                    '      "example_bullet": "<recommended Google XYZ format bullet point tailoring to this role>"\n'
-                    '    }\n'
-                    '  ],\n'
-                    '  "actionable_next_steps": ["<step 1 before applying>", "<step 2>"]\n'
-                    "}"
-                )
-                response = self._client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                )
-                cleaned = re.sub(r"^```json\s*", "", response.text.strip())
-                cleaned = re.sub(r"```$", "", cleaned).strip()
-                return json.loads(cleaned)
-            except Exception as e:
-                logger.error(f"Gemini resume job fit evaluation fallback: {e}", exc_info=True)
+        prompt = (
+            "You are a Senior Technical Hiring Manager and Applicant Tracking System (ATS) Expert. "
+            "Evaluate how well the candidate's resume fits the target job opening.\n\n"
+            f"Target Role: {target_role}\n"
+            f"Target Company: {company or 'Not specified'}\n"
+            f"Job Description & Requirements:\n{job_desc[:3000]}\n\n"
+            f"Candidate Resume Content:\n{resume_text[:5000]}\n\n"
+            "Return ONLY a valid JSON object matching this schema:\n"
+            "{\n"
+            '  "fit_score": <int between 0 and 100>,\n'
+            '  "verdict": "<e.g. 🔥 Strong Fit (Ready to Apply) / ⚠️ Moderate Fit (Tailoring Recommended) / ❌ Significant Skill Gaps>",\n'
+            '  "target_role": "' + target_role + '",\n'
+            '  "target_company": "' + (company or "N/A") + '",\n'
+            '  "matching_skills": ["<matching tech/skill 1>", "<matching skill 2>", "<matching skill 3>"],\n'
+            '  "missing_skills_and_gaps": ["<critical required skill missing on resume 1>", "<missing skill 2>"],\n'
+            '  "seniority_alignment": "<1-2 sentences on whether candidate experience matches the role level>",\n'
+            '  "bullet_tailoring_tips": [\n'
+            '    {\n'
+            '      "section": "<e.g. Experience / Projects>",\n'
+            '      "advice": "<specific advice on what to highlight for this job>",\n'
+            '      "example_bullet": "<recommended Google XYZ format bullet point tailoring to this role>"\n'
+            '    }\n'
+            '  ],\n'
+            '  "actionable_next_steps": ["<step 1 before applying>", "<step 2>"]\n'
+            "}"
+        )
+        raw_response = await self._call_ai_model(prompt)
+        if raw_response:
+            parsed = self._clean_and_parse_json(raw_response)
+            if isinstance(parsed, dict) and "fit_score" in parsed:
+                return parsed
 
         # Heuristic resume job fit evaluator
         return self._heuristic_resume_job_fit(resume_text, target_role, job_desc, company)
@@ -501,36 +545,29 @@ class GeminiResumeService:
                 "description": "Explore engineering opportunities."
             }
 
-        if self._client and self.api_key:
-            try:
-                prompt = (
-                    f"You are an expert tech recruiter and talent intelligence AI. "
-                    f"Provide the exact official career portal and hiring intelligence for the company: '{clean_comp}'.\n"
-                    f"Candidate target role: '{target_role}', location: '{location}'.\n\n"
-                    f"Return ONLY a valid JSON object matching this schema:\n"
-                    "{\n"
-                    '  "name": "<Official canonical company name, e.g. Google, Swiggy, Uber>",\n'
-                    '  "portal_name": "<Display name of their career portal, e.g. Google Careers, Swiggy Careers>",\n'
-                    '  "home_url": "<Official root careers page URL, e.g. https://careers.google.com or https://careers.swiggy.com>",\n'
-                    '  "apply_url": "<Exact job search URL for target role, e.g. https://www.google.com/about/careers/applications/jobs/results/?q=Software+Engineer or Workday/Greenhouse/Lever/Ashby URL>",\n'
-                    '  "tech_stack": ["<key tech 1>", "<key tech 2>", "<key tech 3>", "<key tech 4>"],\n'
-                    '  "ats_type": "<DIRECT_CAREER or ATS_PORTAL or WORKDAY or GREENHOUSE>",\n'
-                    '  "hiring_locations": ["<top location 1>", "<top location 2>", "<top location 3>"],\n'
-                    '  "interview_rounds": ["<e.g. Online Assessment>", "<DSA / Problem Solving>", "<System Design / LLD>", "<Hiring Manager / Values>"],\n'
-                    '  "description": "<2-sentence description of the company engineering team, products, and hiring culture>"\n'
-                    "}"
-                )
+        prompt = (
+            f"You are an expert tech recruiter and talent intelligence AI. "
+            f"Provide the exact official career portal and hiring intelligence for the company: '{clean_comp}'.\n"
+            f"Candidate target role: '{target_role}', location: '{location}'.\n\n"
+            f"Return ONLY a valid JSON object matching this schema:\n"
+            "{\n"
+            '  "name": "<Official canonical company name, e.g. Google, Swiggy, Uber>",\n'
+            '  "portal_name": "<Display name of their career portal, e.g. Google Careers, Swiggy Careers>",\n'
+            '  "home_url": "<Official root careers page URL, e.g. https://careers.google.com or https://careers.swiggy.com>",\n'
+            '  "apply_url": "<Exact job search URL for target role, e.g. https://www.google.com/about/careers/applications/jobs/results/?q=Software+Engineer or Workday/Greenhouse/Lever/Ashby URL>",\n'
+            '  "tech_stack": ["<key tech 1>", "<key tech 2>", "<key tech 3>", "<key tech 4>"],\n'
+            '  "ats_type": "<DIRECT_CAREER or ATS_PORTAL or WORKDAY or GREENHOUSE>",\n'
+            '  "hiring_locations": ["<top location 1>", "<top location 2>", "<top location 3>"],\n'
+            '  "interview_rounds": ["<e.g. Online Assessment>", "<DSA / Problem Solving>", "<System Design / LLD>", "<Hiring Manager / Values>"],\n'
+            '  "description": "<2-sentence description of the company engineering team, products, and hiring culture>"\n'
+            "}"
+        )
 
-                response = self._client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                )
-                cleaned = re.sub(r"^```json\s*", "", response.text.strip())
-                cleaned = re.sub(r"```$", "", cleaned).strip()
-                data = json.loads(cleaned)
-                return data
-            except Exception as e:
-                logger.warning(f"Gemini company career discovery error: {e}")
+        raw_response = await self._call_ai_model(prompt)
+        if raw_response:
+            parsed = self._clean_and_parse_json(raw_response)
+            if isinstance(parsed, dict) and "apply_url" in parsed:
+                return parsed
 
         # Static / Heuristic fallback if Gemini API unavailable or fails
         from services.company_directory import get_company_career_url

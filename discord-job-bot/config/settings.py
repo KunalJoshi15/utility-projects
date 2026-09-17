@@ -38,9 +38,12 @@ class Settings:
     DISCORD_BOT_TOKEN: str = os.getenv("DISCORD_BOT_TOKEN", "")
     DISCORD_GUILD_ID: Optional[str] = os.getenv("DISCORD_GUILD_ID", None)
 
-    # Google Gemini AI Configuration
+    # AI Model Configuration (APIENX Integration & Google Gemini)
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", None)
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    APIENX_API_KEY: Optional[str] = os.getenv("APIENX_API_KEY", os.getenv("GEMINI_API_KEY", None))
+    APIENX_BASE_URL: str = os.getenv("APIENX_BASE_URL", os.getenv("AI_BASE_URL", "https://api.apienx.com/v1"))
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "free/gemini-3.8-flash")
+    AI_PROVIDER: str = os.getenv("AI_PROVIDER", "apienx")
 
     # API Keys for Jobs
     RAPIDAPI_KEY: Optional[str] = os.getenv("RAPIDAPI_KEY", None)

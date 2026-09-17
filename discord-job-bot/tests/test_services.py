@@ -473,5 +473,28 @@ async def test_gemini_discover_company_career_portal():
     assert "careers" in portal_data["apply_url"].lower() or "uber" in portal_data["apply_url"].lower()
 
 
+@pytest.mark.asyncio
+async def test_apienx_json_parsing_and_model_call(monkeypatch):
+    from services.gemini_service import GeminiResumeService
+    gemini_svc = GeminiResumeService()
+    
+    # Test JSON parser with markdown wrappers and raw json
+    sample_json = '```json\n{"ats_score": 88, "summary_verdict": "Great resume", "strengths": ["Python"], "weaknesses_and_flaws": ["None"], "missing_metrics": [], "bullet_point_improvements": [], "actionable_recommendations": ["Apply now"]}\n```'
+    parsed = gemini_svc._clean_and_parse_json(sample_json)
+    assert parsed is not None
+    assert parsed["ats_score"] == 88
+    assert parsed["summary_verdict"] == "Great resume"
+    
+    # Test mocked _call_ai_model
+    async def mock_call(prompt):
+        return sample_json
+    
+    monkeypatch.setattr(gemini_svc, "_call_ai_model", mock_call)
+    res = await gemini_svc.analyze_resume("Jane Developer with 10 years experience building scalable backend microservices and databases in Python and Go.")
+    assert res["ats_score"] == 88
+    assert res["strengths"] == ["Python"]
+
+
+
 
 
