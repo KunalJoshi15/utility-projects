@@ -205,3 +205,27 @@ async def test_target_companies_profile_and_search_and_alerts(test_db: AsyncSess
     assert "Amazon" in comp_names
     assert "Swiggy" in comp_names
     assert alerts[0].min_salary == "₹ 30 LPA"
+
+@pytest.mark.asyncio
+async def test_job_search_no_fake_salary_and_ambitionbox_embed(test_db: AsyncSession):
+    job_svc = JobService()
+    from bot.ui.embeds import create_job_embed
+
+    # Search without min_salary
+    jobs = await job_svc.search_jobs(
+        db=test_db,
+        query="React Developer",
+        country="India",
+        location="Bengaluru",
+        limit=2
+    )
+    assert len(jobs) > 0
+    first_job = jobs[0]
+    # Verify salary is None / not invented
+    assert first_job.salary_range is None
+
+    # Verify embed generated contains AmbitionBox link
+    embed = create_job_embed(first_job, 1, len(jobs))
+    field_names = [f.name for f in embed.fields]
+    assert "📊 AmbitionBox Salary Estimates" in field_names
+    assert not any("Paygrade / Salary" in name for name in field_names)

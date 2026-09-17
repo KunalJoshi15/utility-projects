@@ -1,4 +1,5 @@
 import discord
+import urllib.parse
 from typing import List, Dict, Any
 from database.models import CachedJob, UserProfile, JobApplication, ApplyType, ApplyStatus
 
@@ -11,7 +12,7 @@ COLOR_INFO = 0xEB459E        # Fuchsia
 COLOR_GEMINI = 0x1A73E8      # Google AI Blue
 
 def create_job_embed(job: CachedJob, current_idx: int = 1, total_count: int = 1) -> discord.Embed:
-    """Format clean, accurate single job card embed focused on profile, location, paygrade, and direct apply link."""
+    """Format clean, accurate single job card embed focused on profile, location, real salary/AmbitionBox, and direct apply link."""
     provider_name = job.provider.replace("_", " ").title()
     
     embed = discord.Embed(
@@ -21,11 +22,33 @@ def create_job_embed(job: CachedJob, current_idx: int = 1, total_count: int = 1)
     )
     
     embed.add_field(name="📍 Location", value=f"`{job.location}` {'(Remote 🏠)' if job.is_remote else ''}", inline=True)
-    embed.add_field(name="💰 Paygrade / Salary", value=f"`{job.salary_range}`", inline=True)
     embed.add_field(name="🕒 Employment Type", value=f"`{job.employment_type}`", inline=True)
     
+    # Only display salary if explicitly disclosed / filtered
+    if job.salary_range and job.salary_range.lower() not in ("competitive", "not disclosed", "none", "competitive salary"):
+        embed.add_field(name="💰 Disclosed Salary", value=f"`{job.salary_range}`", inline=True)
+
     if job.company and "Live" not in job.company and "Portal" not in job.company:
-        embed.add_field(name="🏢 Company Filter", value=f"`{job.company}`", inline=True)
+        embed.add_field(name="🏢 Company", value=f"`{job.company}`", inline=True)
+
+    # AmbitionBox salary estimation link
+    clean_title = job.title.split("—")[-1].strip() if "—" in job.title else job.title
+    comp_query = job.company if (job.company and "Live" not in job.company and "Portal" not in job.company) else ""
+    
+    if comp_query:
+        ambitionbox_url = f"https://www.ambitionbox.com/salaries?company={urllib.parse.quote(comp_query)}&designation={urllib.parse.quote(clean_title)}"
+        embed.add_field(
+            name="📊 AmbitionBox Salary Estimates",
+            value=f"[Check **{comp_query}** Salary Insights on AmbitionBox]({ambitionbox_url})",
+            inline=False
+        )
+    else:
+        ambitionbox_url = f"https://www.ambitionbox.com/salaries?designation={urllib.parse.quote(clean_title)}"
+        embed.add_field(
+            name="📊 AmbitionBox Salary Estimates",
+            value=f"[Check **{clean_title}** Salary Insights on AmbitionBox]({ambitionbox_url})",
+            inline=False
+        )
 
     embed.add_field(
         name="🔗 Where to Apply",
@@ -48,11 +71,30 @@ def create_job_detail_embed(job: CachedJob) -> discord.Embed:
         color=0x2ECC71
     )
     embed.add_field(name="📍 Location", value=f"`{job.location}` {'(Remote 🏠)' if job.is_remote else ''}", inline=True)
-    embed.add_field(name="💰 Paygrade / Salary", value=f"`{job.salary_range}`", inline=True)
     embed.add_field(name="🕒 Employment Type", value=f"`{job.employment_type}`", inline=True)
     
+    if job.salary_range and job.salary_range.lower() not in ("competitive", "not disclosed", "none"):
+        embed.add_field(name="💰 Disclosed Salary", value=f"`{job.salary_range}`", inline=True)
+        
     if job.company and "Live" not in job.company and "Portal" not in job.company:
-        embed.add_field(name="🏢 Company Filter", value=f"`{job.company}`", inline=True)
+        embed.add_field(name="🏢 Company", value=f"`{job.company}`", inline=True)
+
+    clean_title = job.title.split("—")[-1].strip() if "—" in job.title else job.title
+    comp_query = job.company if (job.company and "Live" not in job.company and "Portal" not in job.company) else ""
+    if comp_query:
+        ambitionbox_url = f"https://www.ambitionbox.com/salaries?company={urllib.parse.quote(comp_query)}&designation={urllib.parse.quote(clean_title)}"
+        embed.add_field(
+            name="📊 AmbitionBox Salary Insights",
+            value=f"[Check **{comp_query}** Salary Insights on AmbitionBox]({ambitionbox_url})",
+            inline=False
+        )
+    else:
+        ambitionbox_url = f"https://www.ambitionbox.com/salaries?designation={urllib.parse.quote(clean_title)}"
+        embed.add_field(
+            name="📊 AmbitionBox Salary Insights",
+            value=f"[Check **{clean_title}** Salary Insights on AmbitionBox]({ambitionbox_url})",
+            inline=False
+        )
 
     embed.add_field(
         name="🔗 Direct Application Link",

@@ -279,15 +279,8 @@ class JobService:
         naukri_q = urllib.parse.quote(naukri_q_term.lower().replace(" ", "-"))
         naukri_loc = urllib.parse.quote(loc_search.lower().replace(" ", "-").replace(",", ""))
 
-        # Determine salary currency format based on country
-        if min_salary:
-            salary_display = min_salary
-        elif country == "India":
-            salary_display = "₹ 18,00,000 - 38,00,000 PA"
-        elif country == "UK":
-            salary_display = "£ 70,000 - 115,000 / yr"
-        else:
-            salary_display = "$135,000 - $190,000 / yr"
+        # Only assign salary_display if explicitly provided by user filter or job source
+        salary_display = min_salary.strip() if min_salary else None
 
         # Platform URLs
         if country == "India":
