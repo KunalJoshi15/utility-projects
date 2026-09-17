@@ -29,6 +29,7 @@ class JobBot(commands.Bot):
             "bot.cogs.profile_cog",
             "bot.cogs.applications_cog",
             "bot.cogs.alerts_cog",
+            "bot.cogs.salary_cog",
             "bot.cogs.help_cog",
         ]
 

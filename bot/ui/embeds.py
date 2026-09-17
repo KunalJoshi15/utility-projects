@@ -1,7 +1,8 @@
 import discord
 import urllib.parse
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from database.models import CachedJob, UserProfile, JobApplication, ApplyType, ApplyStatus
+from services.salary_service import salary_service
 
 # Color palette for modern Discord bot theme
 COLOR_PRIMARY = 0x5865F2     # Blurple
@@ -31,24 +32,29 @@ def create_job_embed(job: CachedJob, current_idx: int = 1, total_count: int = 1)
     if job.company and "Live" not in job.company and "Portal" not in job.company:
         embed.add_field(name="🏢 Company", value=f"`{job.company}`", inline=True)
 
-    # AmbitionBox salary estimation link
-    clean_title = job.title.split("—")[-1].strip() if "—" in job.title else job.title
-    comp_query = job.company if (job.company and "Live" not in job.company and "Portal" not in job.company) else ""
+    # AmbitionBox & Glassdoor salary estimation links & similar roles
+    benchmarks = salary_service.get_salary_benchmarks(job.title, job.company, job.country)
+    ab = benchmarks["ambitionbox"]
+    gd = benchmarks["glassdoor"]
+    comp = benchmarks["company"]
+    clean_title = benchmarks["role"]
     
-    if comp_query:
-        ambitionbox_url = f"https://www.ambitionbox.com/salaries?company={urllib.parse.quote(comp_query)}&designation={urllib.parse.quote(clean_title)}"
-        embed.add_field(
-            name="📊 AmbitionBox Salary Estimates",
-            value=f"[Check **{comp_query}** Salary Insights on AmbitionBox]({ambitionbox_url})",
-            inline=False
-        )
-    else:
-        ambitionbox_url = f"https://www.ambitionbox.com/salaries?designation={urllib.parse.quote(clean_title)}"
-        embed.add_field(
-            name="📊 AmbitionBox Salary Estimates",
-            value=f"[Check **{clean_title}** Salary Insights on AmbitionBox]({ambitionbox_url})",
-            inline=False
-        )
+    benchmark_lines = []
+    if comp:
+        benchmark_lines.append(f"• 🏢 **{comp} Pay:** [AmbitionBox]({ab['company_role_url']}) • [Glassdoor]({gd['company_role_url']}) • [Levels.fyi]({benchmarks['levels_fyi_url']})")
+    
+    benchmark_lines.append(f"• 🌐 **Market Benchmark ({clean_title}):** [AmbitionBox]({ab['market_role_url']}) • [Glassdoor]({gd['market_role_url']})")
+    
+    # Similar roles
+    sim_ab_links = [f"[{s['role']}]({s['url']})" for s in ab["similar_roles"][:3]]
+    if sim_ab_links:
+        benchmark_lines.append("• 👥 **Similar Roles:** " + " • ".join(sim_ab_links))
+
+    embed.add_field(
+        name="📊 Market Salary Benchmarks (AmbitionBox & Glassdoor)",
+        value="\n".join(benchmark_lines),
+        inline=False
+    )
 
     embed.add_field(
         name="🔗 Where to Apply",
@@ -79,22 +85,26 @@ def create_job_detail_embed(job: CachedJob) -> discord.Embed:
     if job.company and "Live" not in job.company and "Portal" not in job.company:
         embed.add_field(name="🏢 Company", value=f"`{job.company}`", inline=True)
 
-    clean_title = job.title.split("—")[-1].strip() if "—" in job.title else job.title
-    comp_query = job.company if (job.company and "Live" not in job.company and "Portal" not in job.company) else ""
-    if comp_query:
-        ambitionbox_url = f"https://www.ambitionbox.com/salaries?company={urllib.parse.quote(comp_query)}&designation={urllib.parse.quote(clean_title)}"
-        embed.add_field(
-            name="📊 AmbitionBox Salary Insights",
-            value=f"[Check **{comp_query}** Salary Insights on AmbitionBox]({ambitionbox_url})",
-            inline=False
-        )
-    else:
-        ambitionbox_url = f"https://www.ambitionbox.com/salaries?designation={urllib.parse.quote(clean_title)}"
-        embed.add_field(
-            name="📊 AmbitionBox Salary Insights",
-            value=f"[Check **{clean_title}** Salary Insights on AmbitionBox]({ambitionbox_url})",
-            inline=False
-        )
+    benchmarks = salary_service.get_salary_benchmarks(job.title, job.company, job.country)
+    ab = benchmarks["ambitionbox"]
+    gd = benchmarks["glassdoor"]
+    comp = benchmarks["company"]
+    clean_title = benchmarks["role"]
+    
+    benchmark_lines = []
+    if comp:
+        benchmark_lines.append(f"• 🏢 **{comp} Compensation:** [AmbitionBox]({ab['company_role_url']}) • [Glassdoor]({gd['company_role_url']}) • [Levels.fyi]({benchmarks['levels_fyi_url']})")
+    benchmark_lines.append(f"• 🌐 **Industry Benchmark ({clean_title}):** [AmbitionBox]({ab['market_role_url']}) • [Glassdoor]({gd['market_role_url']})")
+    
+    sim_ab_links = [f"[{s['role']}]({s['url']})" for s in ab["similar_roles"][:4]]
+    if sim_ab_links:
+        benchmark_lines.append("• 👥 **Compare Similar Roles:** " + " • ".join(sim_ab_links))
+
+    embed.add_field(
+        name="📊 Market Salary Benchmarks (AmbitionBox & Glassdoor)",
+        value="\n".join(benchmark_lines),
+        inline=False
+    )
 
     embed.add_field(
         name="🔗 Direct Application Link",
@@ -273,6 +283,93 @@ def create_applications_list_embed(applications: List[JobApplication], user: Use
     embed.set_footer(text="Showing most recent 10 applications.")
     return embed
 
+def create_salary_card_embed(benchmarks: Dict[str, Any]) -> discord.Embed:
+    """Format full salary intelligence and benchmark embed for a role and company."""
+    role = benchmarks["role"]
+    comp = benchmarks.get("company")
+    loc = benchmarks.get("location", "India")
+    ab = benchmarks["ambitionbox"]
+    gd = benchmarks["glassdoor"]
+
+    title_text = f"💰 Salary Intelligence: {role}"
+    if comp:
+        title_text += f" @ {comp}"
+
+    embed = discord.Embed(
+        title=title_text,
+        description=f"Authentic market compensation data & crowd-sourced paygrades for **{loc}**.",
+        color=COLOR_PRIMARY
+    )
+
+    if comp:
+        comp_links = [
+            f"• [🏢 **{comp} {role} Salaries on AmbitionBox**]({ab['company_role_url']})",
+            f"• [🏢 **{comp} {role} Salaries on Glassdoor**]({gd['company_role_url']})",
+            f"• [📈 **All {comp} Paygrades Overview**]({ab['company_all_url']})",
+            f"• [⭐ **{comp} Reviews & Culture**]({ab['company_reviews_url']})",
+            f"• [📊 **Levels.fyi Tech Compensation**]({benchmarks['levels_fyi_url']})"
+        ]
+        embed.add_field(
+            name=f"🏢 {comp} Direct Compensation",
+            value="\n".join(comp_links),
+            inline=False
+        )
+
+    # Market Wide Benchmark
+    market_links = [
+        f"• [🌐 **AmbitionBox Market Salaries for {role}**]({ab['market_role_url']})",
+        f"• [🌐 **Glassdoor Market Salaries for {role}**]({gd['market_role_url']})"
+    ]
+    embed.add_field(
+        name=f"🌐 Market Average ({role})",
+        value="\n".join(market_links),
+        inline=False
+    )
+
+    # Similar & Adjacent Roles Benchmarks
+    sim_lines = []
+    for s_ab, s_gd in zip(ab["similar_roles"], gd["similar_roles"]):
+        sim_lines.append(f"• **{s_ab['role']}:** [AmbitionBox]({s_ab['url']}) • [Glassdoor]({s_gd['url']})")
+
+    if sim_lines:
+        embed.add_field(
+            name="👥 Similar & Adjacent Roles Benchmarks",
+            value="\n".join(sim_lines),
+            inline=False
+        )
+
+    embed.set_footer(text="Data source: AmbitionBox & Glassdoor • No synthetic / fabricated paygrades.")
+    return embed
+
+def create_salary_comparison_embed(comparison: Dict[str, Any]) -> discord.Embed:
+    """Format side-by-side salary comparison embed across dream companies."""
+    role = comparison["role"]
+    companies = comparison["companies"]
+
+    embed = discord.Embed(
+        title=f"📊 Dream Companies Salary Comparison: {role}",
+        description="Side-by-side authentic paygrade intelligence across your target companies:",
+        color=COLOR_PRIMARY
+    )
+
+    for c in companies:
+        c_name = c["company"]
+        links = f"• [AmbitionBox]({c['ambitionbox_url']}) • [Glassdoor]({c['glassdoor_url']}) • [Levels.fyi]({c['levels_url']})"
+        embed.add_field(
+            name=f"🏢 {c_name}",
+            value=links,
+            inline=True
+        )
+
+    embed.add_field(
+        name="🌐 Industry Market Baseline",
+        value=f"• [AmbitionBox {role} Average]({comparison['market_ambitionbox']})\n• [Glassdoor {role} Average]({comparison['market_glassdoor']})",
+        inline=False
+    )
+
+    embed.set_footer(text="Data source: AmbitionBox & Glassdoor • Use /profile companies to manage targets.")
+    return embed
+
 def create_help_embed() -> discord.Embed:
     """Format help instructions embed."""
     embed = discord.Embed(
@@ -283,16 +380,25 @@ def create_help_embed() -> discord.Embed:
     
     embed.add_field(
         name="🔍 Job Search Commands",
-        value="• `/jobs search <query> [location] [remote] [type]` - Search live listings (LinkedIn, Naukri, Google Jobs)\n"
+        value="• `/jobs search <query> [location] [type] [salary] [company]` - Search live listings (LinkedIn, Naukri, Google Jobs)\n"
               "• `/jobs match` - Auto-match jobs based on your uploaded resume\n"
+              "• `/jobs companies [names]` - View open vacancies across your target dream companies\n"
               "• `/jobs view <job_id>` - View full description, requirements & live links\n"
               "• `/jobs apply <job_id>` - Auto-apply using your stored profile & resume",
         inline=False
     )
     
     embed.add_field(
+        name="💰 Salary & Market Benchmark Commands",
+        value="• `/salary check <role> [company] [location]` - Look up authentic AmbitionBox & Glassdoor benchmarks for role & similar roles\n"
+              "• `/salary compare <role> [custom_companies]` - Compare paygrades across your dream companies",
+        inline=False
+    )
+
+    embed.add_field(
         name="🔔 Automated Job Alerts",
         value="• `/alerts create <query> [location] [company] [min_salary]` - Get tagged when new jobs appear\n"
+              "• `/alerts companies [role] [min_salary]` - Batch create 24/7 alerts for all your dream companies\n"
               "• `/alerts list` - View your active job alerts\n"
               "• `/alerts delete <alert_id>` - Delete an alert rule",
         inline=False
@@ -307,7 +413,8 @@ def create_help_embed() -> discord.Embed:
 
     embed.add_field(
         name="👤 Profile & Resume Commands",
-        value="• `/profile setup` - Set your full name, email, phone, and links\n"
+        value="• `/profile setup` - Set your full name, email, phone, and location\n"
+              "• `/profile companies <names>` - Save your target dream companies (Google, Microsoft, etc.)\n"
               "• `/profile resume` - Upload your PDF resume for auto-applications & AI review\n"
               "• `/profile details` - Set experience years, notice period, sponsorship\n"
               "• `/profile cookie` - Save LinkedIn session token for Easy Apply\n"

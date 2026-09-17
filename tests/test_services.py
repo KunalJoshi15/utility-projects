@@ -224,8 +224,43 @@ async def test_job_search_no_fake_salary_and_ambitionbox_embed(test_db: AsyncSes
     # Verify salary is None / not invented
     assert first_job.salary_range is None
 
-    # Verify embed generated contains AmbitionBox link
+    # Verify embed generated contains AmbitionBox and Glassdoor benchmark links
     embed = create_job_embed(first_job, 1, len(jobs))
     field_names = [f.name for f in embed.fields]
-    assert "📊 AmbitionBox Salary Estimates" in field_names
+    assert any("Market Salary Benchmarks" in name for name in field_names)
+    benchmark_field = next(f for f in embed.fields if "Market Salary Benchmarks" in f.name)
+    assert "ambitionbox.com" in benchmark_field.value
+    assert "glassdoor.co.in" in benchmark_field.value
     assert not any("Paygrade / Salary" in name for name in field_names)
+
+def test_salary_service_benchmarks_and_similar_roles():
+    from services.salary_service import salary_service
+    
+    benchmarks = salary_service.get_salary_benchmarks(
+        role="Senior Backend Engineer",
+        company="Google",
+        location="India"
+    )
+    
+    assert benchmarks["role"] == "Senior Backend Engineer"
+    assert benchmarks["company"] == "Google"
+    assert "ambitionbox.com" in benchmarks["ambitionbox"]["company_role_url"]
+    assert "glassdoor.co.in" in benchmarks["glassdoor"]["company_role_url"]
+    assert "levels.fyi" in benchmarks["levels_fyi_url"]
+    
+    # Check similar roles detection
+    assert len(benchmarks["similar_role_names"]) > 0
+    assert len(benchmarks["ambitionbox"]["similar_roles"]) > 0
+    assert len(benchmarks["glassdoor"]["similar_roles"]) > 0
+    
+    # Check company comparison
+    comparison = salary_service.compare_salaries_across_companies(
+        role="Software Engineer",
+        companies=["Google", "Microsoft", "Amazon", "Swiggy"]
+    )
+    assert len(comparison["companies"]) == 4
+    for c in comparison["companies"]:
+        assert "ambitionbox.com" in c["ambitionbox_url"]
+        assert "glassdoor.co.in" in c["glassdoor_url"]
+        assert "levels.fyi" in c["levels_url"]
+
