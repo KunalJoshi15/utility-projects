@@ -14,9 +14,29 @@ class ProfileCog(commands.GroupCog, group_name="profile"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="setup", description="Open form to configure your contact information and links")
-    async def setup_profile(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(ProfileSetupModal())
+    @app_commands.command(name="setup", description="Configure your candidate profile with your name (Discord ID is auto-populated)")
+    @app_commands.describe(name="Your full name (optional - opens quick modal if omitted)")
+    async def setup_profile(self, interaction: discord.Interaction, name: Optional[str] = None):
+        if name:
+            await interaction.response.defer(ephemeral=True)
+            async with get_db() as db:
+                profile = await profile_service.update_profile(
+                    db=db,
+                    discord_id=str(interaction.user.id),
+                    username=interaction.user.name,
+                    full_name=name.strip()
+                )
+                embed = create_profile_embed(profile)
+            await interaction.followup.send(
+                content=f"✅ **Profile Configured for {profile.full_name}!**\n"
+                        f"Your Discord User ID (`{interaction.user.id}`) has been linked automatically. Next, attach your resume with `/profile resume`.",
+                embed=embed,
+                ephemeral=True
+            )
+        else:
+            default_name = interaction.user.display_name or interaction.user.name
+            user_label = f"@{interaction.user.name} (ID: {interaction.user.id})"
+            await interaction.response.send_modal(ProfileSetupModal(default_name=default_name, discord_user_label=user_label))
 
     @app_commands.command(name="details", description="Configure work experience, current role, notice period, and sponsorship")
     async def setup_details(self, interaction: discord.Interaction):

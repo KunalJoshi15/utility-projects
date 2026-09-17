@@ -4,57 +4,39 @@ from services.profile_service import profile_service
 from bot.ui.embeds import create_profile_embed
 
 class ProfileSetupModal(discord.ui.Modal, title="Candidate Profile Setup"):
-    full_name = discord.ui.TextInput(
-        label="Full Name",
-        placeholder="e.g. Jane Doe",
-        required=True,
-        max_length=100
-    )
-    email = discord.ui.TextInput(
-        label="Email Address",
-        placeholder="e.g. jane.doe@example.com",
-        required=True,
-        max_length=100
-    )
-    phone = discord.ui.TextInput(
-        label="Phone Number (with Country Code)",
-        placeholder="e.g. +1 555-0199 or +91 9876543210",
-        required=True,
-        max_length=30
-    )
-    location = discord.ui.TextInput(
-        label="Location (City, Country)",
-        placeholder="e.g. San Francisco, USA or Bangalore, India",
-        required=True,
-        max_length=100
-    )
-    linkedin_url = discord.ui.TextInput(
-        label="LinkedIn Profile URL",
-        placeholder="e.g. https://www.linkedin.com/in/janedoe",
-        required=False,
-        max_length=200
-    )
+    def __init__(self, default_name: str = "", discord_user_label: str = ""):
+        super().__init__()
+        self.full_name = discord.ui.TextInput(
+            label="Your Full Name (Mandatory)",
+            placeholder="e.g. Jane Doe",
+            default=default_name,
+            required=True,
+            max_length=100
+        )
+        self.add_item(self.full_name)
+
+        if discord_user_label:
+            self.discord_info = discord.ui.TextInput(
+                label="Discord User ID (Auto-Populated)",
+                default=discord_user_label,
+                required=False,
+                max_length=100
+            )
+            self.add_item(self.discord_info)
 
     async def on_submit(self, interaction: discord.Interaction):
-        city = self.location.value.split(",")[0].strip() if "," in self.location.value else self.location.value.strip()
-        country = self.location.value.split(",")[1].strip() if "," in self.location.value else "Global"
-
         async with get_db() as db:
             profile = await profile_service.update_profile(
                 db=db,
                 discord_id=str(interaction.user.id),
                 username=interaction.user.name,
-                full_name=self.full_name.value.strip(),
-                email=self.email.value.strip(),
-                phone=self.phone.value.strip(),
-                city=city,
-                country=country,
-                linkedin_url=self.linkedin_url.value.strip() if self.linkedin_url.value else None
+                full_name=self.full_name.value.strip()
             )
             embed = create_profile_embed(profile)
 
         await interaction.response.send_message(
-            "✅ **Profile Updated!** Don't forget to attach your resume using `/profile resume`.",
+            f"✅ **Profile Configured for {profile.full_name}!**\n"
+            f"Your Discord User ID (`{interaction.user.id}`) is linked. Next, upload your resume with `/profile resume`.",
             embed=embed,
             ephemeral=True
         )
