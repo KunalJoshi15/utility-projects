@@ -183,6 +183,77 @@ def create_resume_review_embed(review: Dict[str, Any], candidate_name: str) -> d
     embed.set_footer(text="Powered by Google Gemini AI • Use /jobs match to find jobs matching your resume")
     return embed
 
+def create_resume_job_fit_embed(fit_data: Dict[str, Any], candidate_name: str) -> discord.Embed:
+    """Format resume-to-job opening match & tailoring scorecard embed."""
+    score = fit_data.get("fit_score", 70)
+    score_color = COLOR_SUCCESS if score >= 80 else COLOR_WARNING if score >= 60 else COLOR_DANGER
+    role = fit_data.get("target_role", "Target Position")
+    comp = fit_data.get("target_company")
+    
+    comp_header = f" @ {comp}" if comp and comp != "N/A" else ""
+    
+    embed = discord.Embed(
+        title=f"🎯 Resume-to-Job Fit Audit: {role}{comp_header}",
+        description=f"**Candidate:** `{candidate_name}`\n"
+                    f"**Job Match Score:** `{score}/100`\n"
+                    f"**Verdict:** {fit_data.get('verdict', 'Fit evaluation complete.')}",
+        color=score_color
+    )
+    
+    # 1. Matching Skills
+    matching = fit_data.get("matching_skills", [])
+    if matching:
+        match_str = ", ".join([f"`{m}`" for m in matching[:10]])
+        embed.add_field(
+            name="✅ Matching Skills & Strengths",
+            value=match_str,
+            inline=False
+        )
+        
+    # 2. Missing Skills & Keyword Gaps
+    missing = fit_data.get("missing_skills_and_gaps", [])
+    if missing:
+        missing_str = ", ".join([f"`{m}`" for m in missing[:8]]) if isinstance(missing, list) else str(missing)
+        embed.add_field(
+            name="⚠️ Missing Technologies & Keyword Gaps (ATS Filters)",
+            value=missing_str,
+            inline=False
+        )
+        
+    # 3. Seniority & Alignment
+    seniority = fit_data.get("seniority_alignment")
+    if seniority:
+        embed.add_field(
+            name="⏳ Seniority & Experience Alignment",
+            value=seniority,
+            inline=False
+        )
+        
+    # 4. Tailoring Blueprint
+    tips = fit_data.get("bullet_tailoring_tips", [])
+    if tips:
+        first_tip = tips[0]
+        advice_text = f"**Section:** `{first_tip.get('section', 'Experience')}`\n" \
+                      f"**Advice:** {first_tip.get('advice', '')}\n" \
+                      f"💡 **Recommended Bullet Rewrite:**\n*\"{first_tip.get('example_bullet', '')}\"*"
+        embed.add_field(
+            name="💡 Resume Tailoring Blueprint (Google XYZ Method)",
+            value=advice_text,
+            inline=False
+        )
+        
+    # 5. Next Steps
+    steps = fit_data.get("actionable_next_steps", [])
+    if steps:
+        embed.add_field(
+            name="🚀 Steps Before Submitting Application",
+            value="\n".join([f"• {s}" for s in steps[:3]]),
+            inline=False
+        )
+        
+    embed.set_footer(text="Powered by Google Gemini AI • Tailor your resume before applying with /jobs apply")
+    return embed
+
 def create_resume_parsed_embed(profile_data: Dict[str, Any], candidate_name: str) -> discord.Embed:
     """Format extracted resume profile embed."""
     embed = discord.Embed(
@@ -507,7 +578,9 @@ def create_help_embed() -> discord.Embed:
     
     embed.add_field(
         name="🔍 Job Search Commands",
-        value="• `/jobs search <query> [location] [type] [salary] [company] [visa_sponsorship]` - Search live listings (LinkedIn, Naukri, Relocate.me, Google Jobs)\n"
+        value="• `/jobs search <query> [country] [city] [type] [salary] [company]` - Search live listings (LinkedIn, Naukri, Google Jobs)\n"
+              "• `/jobs prompt <description>` - Natural language search: type a project or tech description to find matching jobs\n"
+              "• `/jobs describe` - Interactive modal to paste a job description or custom requirements\n"
               "• `/jobs match` - Auto-match jobs based on your uploaded resume\n"
               "• `/jobs companies [names]` - View open vacancies across your target dream companies\n"
               "• `/jobs view <job_id>` - View full description, requirements & live links\n"
@@ -540,8 +613,9 @@ def create_help_embed() -> discord.Embed:
     )
 
     embed.add_field(
-        name="✨ Gemini AI Resume Commands",
-        value="• `/resume review` - Deep AI critique of what's not good in your resume + bullet rewrites\n"
+        name="✨ Gemini AI Resume & Job Fit Commands",
+        value="• `/resume fit [job_id] [target_role] [description]` - Audit if your resume is a good fit for a job + ATS tailoring advice\n"
+              "• `/resume review` - Deep AI critique of what's not good in your resume + bullet rewrites\n"
               "• `/resume parse` - Extract skills & role from resume to update your profile automatically",
         inline=False
     )

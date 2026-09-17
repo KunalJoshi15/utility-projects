@@ -305,4 +305,65 @@ async def test_job_search_visa_sponsorship_feeds(test_db: AsyncSession):
     assert any("Landing.jobs" in p for p in providers)
     assert any(j.visa_sponsorship is not None for j in jobs)
 
+@pytest.mark.asyncio
+async def test_gemini_parse_job_search_prompt():
+    gemini_svc = GeminiResumeService()
+    prompt = "Looking for a senior backend engineer working with Python, FastAPI, Docker, and PostgreSQL in Berlin Germany with visa sponsorship"
+    parsed = await gemini_svc.parse_job_search_prompt(prompt)
+    
+    assert "backend" in parsed["primary_role"].lower() or "senior" in parsed["seniority"].lower()
+    techs = [t.lower() for t in parsed["technologies"]]
+    assert any("python" in t for t in techs)
+    assert any("docker" in t or "fastapi" in t for t in techs)
+    assert parsed["detected_country"] == "Germany" or "berlin" in parsed["detected_location"].lower()
+    assert parsed["visa_sponsorship"] is True
+
+@pytest.mark.asyncio
+async def test_gemini_evaluate_resume_fit_for_job():
+    gemini_svc = GeminiResumeService()
+    resume_text = (
+        "Alex Dev\n"
+        "Senior Software Engineer\n"
+        "Skills: Python, FastAPI, AWS, Docker, PostgreSQL, Redis\n"
+        "Experience: Built high-throughput microservices handling 10k RPS. Improved latency by 35%."
+    )
+    target_role = "Senior Python Backend Engineer"
+    jd = "Seeking a Senior Backend Engineer proficient in Python, FastAPI, Kubernetes, and Kafka. Experience in microservices required."
+    
+    fit = await gemini_svc.evaluate_resume_fit_for_job(
+        resume_text=resume_text,
+        target_role=target_role,
+        job_description=jd,
+        company="Stripe"
+    )
+    
+    assert "fit_score" in fit
+    assert isinstance(fit["fit_score"], int)
+    assert 0 <= fit["fit_score"] <= 100
+    assert "verdict" in fit
+    assert len(fit["matching_skills"]) > 0
+    assert any("python" in s.lower() or "fastapi" in s.lower() for s in fit["matching_skills"])
+    assert len(fit["missing_skills_and_gaps"]) > 0  # e.g., Kubernetes, Kafka
+    assert len(fit["bullet_tailoring_tips"]) > 0
+
+@pytest.mark.asyncio
+async def test_job_service_search_by_prompt(test_db: AsyncSession):
+    job_svc = JobService()
+    prompt = "React and TypeScript frontend engineer jobs in Bengaluru India"
+    
+    parsed, jobs = await job_svc.search_jobs_by_prompt(
+        db=test_db,
+        prompt_text=prompt,
+        user=None,
+        limit=5
+    )
+    
+    assert "react" in [t.lower() for t in parsed.get("technologies", [])]
+    assert len(jobs) > 0
+    for job in jobs:
+        assert job.job_id is not None
+        assert "India" in job.country or "Bengaluru" in job.location
+        assert any(domain in job.apply_url for domain in ["linkedin.com", "naukri.com", "google.com", "indeed.com"])
+
+
 

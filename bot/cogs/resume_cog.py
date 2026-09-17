@@ -65,5 +65,66 @@ class ResumeCog(commands.GroupCog, group_name="resume"):
             ephemeral=True
         )
 
+    @app_commands.command(
+        name="fit",
+        description="Audit if your resume is a good fit for a specific job profile, tech stack or opening"
+    )
+    @app_commands.describe(
+        job_id="Optional: unique ID of a job from /jobs search to evaluate against",
+        target_role="Target role (e.g. 'Senior Backend Engineer')",
+        job_description="Job requirements or description to compare against your resume",
+        company="Company name (optional)"
+    )
+    async def check_fit(
+        self,
+        interaction: discord.Interaction,
+        job_id: Optional[str] = None,
+        target_role: Optional[str] = None,
+        job_description: Optional[str] = None,
+        company: Optional[str] = None
+    ):
+        # If no arguments are provided, open interactive modal
+        if not job_id and not target_role and not job_description:
+            from bot.ui.modals import ResumeJobFitModal
+            modal = ResumeJobFitModal()
+            await interaction.response.send_modal(modal)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        from services.job_service import job_service
+        from bot.ui.embeds import create_resume_job_fit_embed
+
+        async with get_db() as db:
+            user = await profile_service.get_profile(db, str(interaction.user.id))
+            if not user or not user.resume_file_path:
+                await interaction.followup.send(
+                    "❌ **Resume Required!** Please upload your resume first using `/profile resume`.",
+                    ephemeral=True
+                )
+                return
+
+            role_to_check = target_role or user.current_role or "Software Engineer"
+            desc_to_check = job_description
+            comp_to_check = company
+
+            if job_id:
+                job = await job_service.get_job_by_id(db, job_id.strip())
+                if job:
+                    role_to_check = job.title
+                    desc_to_check = job.description
+                    comp_to_check = job.company
+
+            resume_text = gemini_service.extract_text_from_file(user.resume_file_path)
+            fit_data = await gemini_service.evaluate_resume_fit_for_job(
+                resume_text=resume_text,
+                target_role=role_to_check,
+                job_description=desc_to_check,
+                company=comp_to_check
+            )
+
+        embed = create_resume_job_fit_embed(fit_data, user.full_name or user.username)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
 async def setup(bot: commands.Bot):
     await bot.add_cog(ResumeCog(bot))

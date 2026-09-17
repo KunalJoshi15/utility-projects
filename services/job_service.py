@@ -140,6 +140,35 @@ class JobService:
 
         return all_jobs[:limit]
 
+    async def search_jobs_by_prompt(
+        self,
+        db: AsyncSession,
+        prompt_text: str,
+        user: Optional[UserProfile] = None,
+        limit: int = 10
+    ):
+        """Parse natural language description/prompt with Gemini AI and execute multi-platform search."""
+        parsed = await gemini_service.parse_job_search_prompt(prompt_text)
+        
+        country = parsed.get("detected_country") or (user.country if user else "India")
+        location = parsed.get("detected_location") or (user.city if user else None)
+        query = parsed.get("clean_query") or parsed.get("primary_role", "Software Engineer")
+        is_remote = parsed.get("is_remote", False)
+        visa_sponsorship = parsed.get("visa_sponsorship", False) or (user.requires_sponsorship if user else False)
+        skills = parsed.get("technologies", [])
+
+        jobs = await self.search_jobs(
+            db=db,
+            query=query,
+            country=country,
+            location=location,
+            is_remote=is_remote,
+            visa_sponsorship=visa_sponsorship,
+            skills_filter=skills,
+            limit=limit
+        )
+        return parsed, jobs
+
     async def search_jobs(
         self,
         db: AsyncSession,

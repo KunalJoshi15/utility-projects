@@ -122,6 +122,59 @@ class JobsCog(commands.GroupCog, group_name="jobs"):
             view=view
         )
 
+    @app_commands.command(
+        name="prompt",
+        description="Natural language search: Type a free-form role & tech description to find matching jobs"
+    )
+    @app_commands.describe(
+        description="Describe target role, tech stack & projects (e.g. 'Backend role with Go, Kafka, Kubernetes in Bangalore')"
+    )
+    async def search_prompt(self, interaction: discord.Interaction, description: str):
+        await interaction.response.defer(ephemeral=False)
+
+        async with get_db() as db:
+            user = await profile_service.get_profile(db, str(interaction.user.id))
+            parsed, jobs = await job_service.search_jobs_by_prompt(
+                db=db,
+                prompt_text=description.strip(),
+                user=user,
+                limit=10
+            )
+
+        if not jobs:
+            await interaction.followup.send(
+                f"❌ No matching jobs found for: *\"{description[:100]}...\"*. Try modifying the description or keywords.",
+                ephemeral=True
+            )
+            return
+
+        first_job = jobs[0]
+        embed = create_job_embed(first_job, 1, len(jobs))
+        view = JobPaginationView(jobs=jobs, user_id=str(interaction.user.id))
+
+        tech_list = parsed.get("technologies", [])
+        tech_badge = f"**Tech:** `{', '.join(tech_list[:4])}`" if tech_list else ""
+        role_badge = f"**Role:** `{parsed.get('primary_role')}`"
+        loc_badge = f"**Location:** `{parsed.get('detected_country') or 'Global'}`"
+        badges = [b for b in [role_badge, tech_badge, loc_badge] if b]
+
+        header = (
+            f"🤖 **AI Natural Language Job Search Results**\n"
+            f"💡 *\"{parsed.get('summary_intent', description[:120])}\"*\n"
+            f"• " + " • ".join(badges) + f"\n🔍 Found **{len(jobs)}** open listings:"
+        )
+
+        await interaction.followup.send(content=header, embed=embed, view=view)
+
+    @app_commands.command(
+        name="describe",
+        description="Open an interactive modal to paste full job description, tech stack & requirements"
+    )
+    async def describe_modal(self, interaction: discord.Interaction):
+        from bot.ui.modals import JobDescriptionSearchModal
+        modal = JobDescriptionSearchModal()
+        await interaction.response.send_modal(modal)
+
     @app_commands.command(name="match", description="Search jobs on LinkedIn, Naukri & Portals matching your uploaded resume")
     async def match_jobs(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)

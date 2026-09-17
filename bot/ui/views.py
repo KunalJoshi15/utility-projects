@@ -69,6 +69,36 @@ class JobPaginationView(discord.ui.View):
         view = JobDetailView(current_job, self.user_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+    @discord.ui.button(label="🎯 Check Resume Fit", style=discord.ButtonStyle.secondary, custom_id="job_check_fit")
+    async def check_fit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        current_job = self.jobs[self.current_index]
+        
+        from database.db import get_db
+        from services.profile_service import profile_service
+        from services.gemini_service import gemini_service
+        from bot.ui.embeds import create_resume_job_fit_embed
+
+        async with get_db() as db:
+            user = await profile_service.get_profile(db, str(interaction.user.id))
+            if not user or not user.resume_file_path:
+                await interaction.followup.send(
+                    "❌ **Resume Required!** Please upload your resume first using `/profile resume` to evaluate your fit for this job.",
+                    ephemeral=True
+                )
+                return
+
+            resume_text = gemini_service.extract_text_from_file(user.resume_file_path)
+            fit_data = await gemini_service.evaluate_resume_fit_for_job(
+                resume_text=resume_text,
+                target_role=current_job.title,
+                job_description=current_job.description,
+                company=current_job.company
+            )
+
+        embed = create_resume_job_fit_embed(fit_data, user.full_name or user.username)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
 
 class JobDetailView(discord.ui.View):
     def __init__(self, job: CachedJob, user_id: str, timeout: float = 180.0):
@@ -86,3 +116,31 @@ class JobDetailView(discord.ui.View):
             f"`/jobs apply {self.job.job_id}`",
             ephemeral=True
         )
+
+    @discord.ui.button(label="🎯 Check Resume Fit", style=discord.ButtonStyle.secondary, custom_id="detail_check_fit")
+    async def check_fit_now(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        from database.db import get_db
+        from services.profile_service import profile_service
+        from services.gemini_service import gemini_service
+        from bot.ui.embeds import create_resume_job_fit_embed
+
+        async with get_db() as db:
+            user = await profile_service.get_profile(db, str(interaction.user.id))
+            if not user or not user.resume_file_path:
+                await interaction.followup.send(
+                    "❌ **Resume Required!** Please upload your resume first using `/profile resume` to evaluate your fit for this job.",
+                    ephemeral=True
+                )
+                return
+
+            resume_text = gemini_service.extract_text_from_file(user.resume_file_path)
+            fit_data = await gemini_service.evaluate_resume_fit_for_job(
+                resume_text=resume_text,
+                target_role=self.job.title,
+                job_description=self.job.description,
+                company=self.job.company
+            )
+
+        embed = create_resume_job_fit_embed(fit_data, user.full_name or user.username)
+        await interaction.followup.send(embed=embed, ephemeral=True)

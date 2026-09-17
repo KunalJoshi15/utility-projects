@@ -216,4 +216,270 @@ class GeminiResumeService:
             "companies": []
         }
 
+    async def parse_job_search_prompt(self, prompt_text: str) -> Dict[str, Any]:
+        """Convert a user's natural language description/prompt into structured search parameters."""
+        if not prompt_text or len(prompt_text.strip()) < 5:
+            return {
+                "primary_role": "Software Engineer",
+                "technologies": ["Python", "SQL"],
+                "seniority": "Mid-Level",
+                "clean_query": "Software Engineer",
+                "detected_location": None,
+                "detected_country": "India",
+                "is_remote": False,
+                "visa_sponsorship": False,
+                "summary_intent": "General software engineering openings."
+            }
+
+        if self._client and self.api_key:
+            try:
+                prompt = (
+                    "You are a talent search AI. Convert the following candidate job search prompt / description "
+                    "into structured technical search parameters. Extract the core role, technologies, location, "
+                    "remote preference, and visa requirement.\n\n"
+                    "Return ONLY a valid JSON object matching this schema:\n"
+                    "{\n"
+                    '  "primary_role": "<e.g. Backend Engineer, Frontend Developer, Data Engineer>",\n'
+                    '  "technologies": ["<tech 1>", "<tech 2>", "<tech 3>"],\n'
+                    '  "seniority": "<Junior / Mid / Senior / Lead>",\n'
+                    '  "clean_query": "<concise search query term with role and top 2 key tech>",\n'
+                    '  "detected_location": "<city name if mentioned, otherwise null>",\n'
+                    '  "detected_country": "<country name if mentioned or implied (e.g. India, Germany, UK, USA, Remote)>",\n'
+                    '  "is_remote": <boolean>,\n'
+                    '  "visa_sponsorship": <boolean>,\n'
+                    '  "summary_intent": "<1 sentence clean summary of what user wants>"\n'
+                    "}\n\n"
+                    f"User Prompt:\n{prompt_text[:2000]}"
+                )
+                response = self._client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                )
+                cleaned = re.sub(r"^```json\s*", "", response.text.strip())
+                cleaned = re.sub(r"```$", "", cleaned).strip()
+                return json.loads(cleaned)
+            except Exception as e:
+                logger.warning(f"Gemini prompt parsing fallback: {e}")
+
+        # Heuristic prompt parser
+        return self._heuristic_parse_prompt(prompt_text)
+
+    def _heuristic_parse_prompt(self, text: str) -> Dict[str, Any]:
+        """Rule-based natural language job prompt parser."""
+        text_lower = text.lower()
+        popular_tech = [
+            "Python", "Java", "Go", "Golang", "JavaScript", "TypeScript", "React", "Node.js", "Next.js",
+            "C++", "Rust", "Kafka", "Kubernetes", "Docker", "AWS", "GCP", "FastAPI", "Django",
+            "Spring Boot", "Microservices", "PostgreSQL", "MongoDB", "Redis", "GraphQL", "Flutter"
+        ]
+        found_tech = [tech for tech in popular_tech if tech.lower() in text_lower]
+
+        # Seniority
+        seniority = "Mid-Level"
+        if any(w in text_lower for w in ["lead", "principal", "architect", "staff"]):
+            seniority = "Lead"
+        elif any(w in text_lower for w in ["senior", "sr", "experienced", "5+ years", "4+ years"]):
+            seniority = "Senior"
+        elif any(w in text_lower for w in ["junior", "jr", "entry", "fresher", "intern"]):
+            seniority = "Junior / Intern"
+
+        # Role
+        role = "Software Engineer"
+        if "backend" in text_lower:
+            role = "Backend Engineer"
+        elif "frontend" in text_lower or "react" in text_lower or "ui" in text_lower:
+            role = "Frontend Engineer"
+        elif "fullstack" in text_lower or "full stack" in text_lower:
+            role = "Full Stack Engineer"
+        elif "data engineer" in text_lower:
+            role = "Data Engineer"
+        elif "data scientist" in text_lower or "machine learning" in text_lower or "ai" in text_lower:
+            role = "Machine Learning / Data Scientist"
+        elif "devops" in text_lower or "sre" in text_lower or "cloud" in text_lower:
+            role = "DevOps / Cloud Engineer"
+
+        # Location & country
+        is_remote = "remote" in text_lower or "wfh" in text_lower
+        detected_loc = None
+        detected_country = "India"
+
+        for city in ["bengaluru", "bangalore", "hyderabad", "pune", "mumbai", "delhi", "noida", "gurgaon", "chennai"]:
+            if city in text_lower:
+                detected_loc = city.title()
+                detected_country = "India"
+                break
+
+        for cnt in ["germany", "berlin", "uk", "london", "netherlands", "amsterdam", "canada", "toronto", "usa", "us"]:
+            if cnt in text_lower:
+                if cnt in ["germany", "berlin"]:
+                    detected_country = "Germany"
+                elif cnt in ["uk", "london"]:
+                    detected_country = "UK"
+                elif cnt in ["netherlands", "amsterdam"]:
+                    detected_country = "Netherlands"
+                elif cnt in ["canada", "toronto"]:
+                    detected_country = "Canada"
+                elif cnt in ["usa", "us"]:
+                    detected_country = "USA"
+                break
+
+        visa_sponsorship = any(w in text_lower for w in ["visa", "sponsorship", "relocation", "abroad", "europe"])
+
+        query_tokens = [seniority] if seniority in ["Senior", "Lead"] else []
+        if found_tech:
+            query_tokens.extend(found_tech[:2])
+        query_tokens.append(role)
+        clean_query = " ".join(query_tokens)
+
+        tech_summary = ", ".join(found_tech[:4]) if found_tech else "core technologies"
+        return {
+            "primary_role": role,
+            "technologies": found_tech,
+            "seniority": seniority,
+            "clean_query": clean_query,
+            "detected_location": detected_loc,
+            "detected_country": detected_country,
+            "is_remote": is_remote,
+            "visa_sponsorship": visa_sponsorship,
+            "summary_intent": f"Targeting {seniority} {role} roles working with {tech_summary}."
+        }
+
+    async def evaluate_resume_fit_for_job(
+        self,
+        resume_text: str,
+        target_role: str,
+        job_description: Optional[str] = None,
+        company: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Evaluate how well a candidate's resume matches a specific target job opening."""
+        if not resume_text or len(resume_text.strip()) < 50:
+            return {
+                "fit_score": 40,
+                "verdict": "⚠️ Resume Content Missing or Incomplete",
+                "target_role": target_role,
+                "target_company": company or "N/A",
+                "matching_skills": [],
+                "missing_skills_and_gaps": ["Unable to read complete resume. Re-upload your resume PDF."],
+                "seniority_alignment": "Unknown",
+                "bullet_tailoring_tips": [],
+                "actionable_next_steps": ["Upload a detailed PDF resume with `/profile resume`."]
+            }
+
+        job_desc = job_description or f"Opening for {target_role} at {company or 'Target Company'}."
+
+        if self._client and self.api_key:
+            try:
+                prompt = (
+                    "You are a Senior Technical Hiring Manager and Applicant Tracking System (ATS) Expert. "
+                    "Evaluate how well the candidate's resume fits the target job opening.\n\n"
+                    f"Target Role: {target_role}\n"
+                    f"Target Company: {company or 'Not specified'}\n"
+                    f"Job Description & Requirements:\n{job_desc[:3000]}\n\n"
+                    f"Candidate Resume Content:\n{resume_text[:5000]}\n\n"
+                    "Return ONLY a valid JSON object matching this schema:\n"
+                    "{\n"
+                    '  "fit_score": <int between 0 and 100>,\n'
+                    '  "verdict": "<e.g. 🔥 Strong Fit (Ready to Apply) / ⚠️ Moderate Fit (Tailoring Recommended) / ❌ Significant Skill Gaps>",\n'
+                    '  "target_role": "' + target_role + '",\n'
+                    '  "target_company": "' + (company or "N/A") + '",\n'
+                    '  "matching_skills": ["<matching tech/skill 1>", "<matching skill 2>", "<matching skill 3>"],\n'
+                    '  "missing_skills_and_gaps": ["<critical required skill missing on resume 1>", "<missing skill 2>"],\n'
+                    '  "seniority_alignment": "<1-2 sentences on whether candidate experience matches the role level>",\n'
+                    '  "bullet_tailoring_tips": [\n'
+                    '    {\n'
+                    '      "section": "<e.g. Experience / Projects>",\n'
+                    '      "advice": "<specific advice on what to highlight for this job>",\n'
+                    '      "example_bullet": "<recommended Google XYZ format bullet point tailoring to this role>"\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "actionable_next_steps": ["<step 1 before applying>", "<step 2>"]\n'
+                    "}"
+                )
+                response = self._client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                )
+                cleaned = re.sub(r"^```json\s*", "", response.text.strip())
+                cleaned = re.sub(r"```$", "", cleaned).strip()
+                return json.loads(cleaned)
+            except Exception as e:
+                logger.error(f"Gemini resume job fit evaluation fallback: {e}", exc_info=True)
+
+        # Heuristic resume job fit evaluator
+        return self._heuristic_resume_job_fit(resume_text, target_role, job_desc, company)
+
+    def _heuristic_resume_job_fit(
+        self,
+        resume_text: str,
+        target_role: str,
+        job_description: str,
+        company: Optional[str]
+    ) -> Dict[str, Any]:
+        """Rule-based resume to job fit calculation."""
+        res_lower = resume_text.lower()
+        job_lower = (job_description + " " + target_role).lower()
+
+        popular_skills = [
+            "python", "java", "go", "golang", "javascript", "typescript", "react", "next.js",
+            "node.js", "docker", "kubernetes", "aws", "gcp", "azure", "kafka", "redis",
+            "sql", "postgresql", "mongodb", "fastapi", "spring boot", "microservices", "ci/cd",
+            "graphql", "rest api", "system design", "distributed systems", "git"
+        ]
+
+        skills_in_job = [s for s in popular_skills if s in job_lower]
+        if not skills_in_job:
+            skills_in_job = ["python", "sql", "microservices", "docker", "aws"]
+
+        matching = [s.title() for s in skills_in_job if s in res_lower]
+        missing = [s.title() for s in skills_in_job if s not in res_lower]
+
+        # Calculate score
+        if skills_in_job:
+            match_ratio = len(matching) / len(skills_in_job)
+            fit_score = int(45 + (match_ratio * 45))
+        else:
+            fit_score = 70
+
+        if target_role.lower() in res_lower:
+            fit_score += 10
+        fit_score = max(30, min(95, fit_score))
+
+        if fit_score >= 80:
+            verdict = "🔥 Strong Fit — Your profile aligns well with this opening!"
+        elif fit_score >= 60:
+            verdict = "⚠️ Moderate Match — Relevant foundation, but some required tech is missing."
+        else:
+            verdict = "❌ Skill Gaps Detected — Major requirements are not reflected on your resume."
+
+        tailoring_tips = [
+            {
+                "section": "Technical Skills & Summary",
+                "advice": f"Ensure {', '.join(matching[:3]) if matching else 'core frameworks'} are positioned prominently at the top of your resume.",
+                "example_bullet": f"Architected scalable backend systems using {matching[0] if matching else 'modern stack'}, ensuring high availability and 99.9% uptime."
+            }
+        ]
+        if missing:
+            tailoring_tips.append({
+                "section": "Work Experience / Key Projects",
+                "advice": f"Add project or hobby work demonstrating experience with {missing[0]}.",
+                "example_bullet": f"Integrated {missing[0]} pipelines to automate workflow processing and reduce cycle times by 30%."
+            })
+
+        return {
+            "fit_score": fit_score,
+            "verdict": verdict,
+            "target_role": target_role,
+            "target_company": company or "N/A",
+            "matching_skills": matching or ["General Software Engineering", "Problem Solving"],
+            "missing_skills_and_gaps": missing or ["No major keyword gaps detected!"],
+            "seniority_alignment": "Experience level is in range; tailor bullet points to match the target responsibility scope.",
+            "bullet_tailoring_tips": tailoring_tips,
+            "actionable_next_steps": [
+                f"Incorporate missing keywords ({', '.join(missing[:3])}) if you have relevant experience.",
+                "Quantify accomplishments with business outcomes and metrics before submitting.",
+                "Run `/jobs apply` once your resume reflects these key competencies."
+            ]
+        }
+
 gemini_service = GeminiResumeService()
+
