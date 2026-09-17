@@ -29,15 +29,17 @@ class JobsCog(commands.GroupCog, group_name="jobs"):
         employment_type="Employment type (Full-time, Internship, Contract, Part-time)",
         min_salary="Minimum target salary / payscale (e.g. '₹ 25 LPA', '₹ 15 LPA', '$140k')",
         company="Specific target company (e.g. 'Google', 'Amazon', 'Microsoft', 'Flipkart')",
+        visa_sponsorship="Filter for verified international visa sponsorship & relocation openings",
         remote="Filter strictly for remote positions"
     )
     @app_commands.choices(
         country=[
             app_commands.Choice(name="🇮🇳 India", value="India"),
-            app_commands.Choice(name="🇺🇸 USA", value="USA"),
+            app_commands.Choice(name="🇩🇪 Germany (EU Blue Card)", value="Germany"),
+            app_commands.Choice(name="🇳🇱 Netherlands (Highly Skilled Migrant)", value="Netherlands"),
             app_commands.Choice(name="🇬🇧 United Kingdom", value="UK"),
-            app_commands.Choice(name="🇨🇦 Canada", value="Canada"),
-            app_commands.Choice(name="🇩🇪 Germany", value="Germany"),
+            app_commands.Choice(name="🇨🇦 Canada (Global Talent Stream)", value="Canada"),
+            app_commands.Choice(name="🇺🇸 USA (H-1B & L-1 Transfer)", value="USA"),
             app_commands.Choice(name="🌐 Worldwide / Remote", value="Remote"),
         ],
         employment_type=[
@@ -56,6 +58,7 @@ class JobsCog(commands.GroupCog, group_name="jobs"):
         employment_type: Optional[app_commands.Choice[str]] = None,
         min_salary: Optional[str] = None,
         company: Optional[str] = None,
+        visa_sponsorship: bool = False,
         remote: bool = False
     ):
         await interaction.response.defer(ephemeral=False)
@@ -78,6 +81,7 @@ class JobsCog(commands.GroupCog, group_name="jobs"):
                 company_filter=company,
                 min_salary=min_salary,
                 employment_type=emp_val,
+                visa_sponsorship=visa_sponsorship,
                 is_remote=remote,
                 limit=10
             )
@@ -106,6 +110,8 @@ class JobsCog(commands.GroupCog, group_name="jobs"):
             filter_badges.append(f"**Salary:** `{min_salary}`")
         if company:
             filter_badges.append(f"**Company:** `{company}`")
+        if visa_sponsorship:
+            filter_badges.append("`🛂 Visa Sponsorship`")
         if remote:
             filter_badges.append("`🏠 Remote`")
 

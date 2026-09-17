@@ -34,15 +34,17 @@ class AlertsCog(commands.GroupCog, group_name="alerts"):
         location="Target city or region (e.g. 'Bengaluru', 'Hyderabad', 'Pune', 'Mumbai', 'Delhi NCR')",
         employment_type="Employment type (Full-time, Internship, Contract, Part-time)",
         min_salary="Minimum target salary / payscale (e.g. '₹ 25 LPA', '₹ 15 LPA', '$150,000')",
-        company="Specific target company (optional, e.g. 'Google', 'Amazon', 'Flipkart')"
+        company="Specific target company (optional, e.g. 'Google', 'Amazon', 'Flipkart')",
+        visa_sponsorship="Only alert for verified international visa sponsorship & relocation openings"
     )
     @app_commands.choices(
         country=[
             app_commands.Choice(name="🇮🇳 India", value="India"),
-            app_commands.Choice(name="🇺🇸 USA", value="USA"),
+            app_commands.Choice(name="🇩🇪 Germany (EU Blue Card)", value="Germany"),
+            app_commands.Choice(name="🇳🇱 Netherlands (Highly Skilled Migrant)", value="Netherlands"),
             app_commands.Choice(name="🇬🇧 United Kingdom", value="UK"),
-            app_commands.Choice(name="🇨🇦 Canada", value="Canada"),
-            app_commands.Choice(name="🇩🇪 Germany", value="Germany"),
+            app_commands.Choice(name="🇨🇦 Canada (Global Talent Stream)", value="Canada"),
+            app_commands.Choice(name="🇺🇸 USA (H-1B & L-1 Transfer)", value="USA"),
             app_commands.Choice(name="🌐 Worldwide / Remote", value="Remote"),
         ],
         employment_type=[
@@ -60,7 +62,8 @@ class AlertsCog(commands.GroupCog, group_name="alerts"):
         location: Optional[str] = None,
         employment_type: Optional[app_commands.Choice[str]] = None,
         min_salary: Optional[str] = None,
-        company: Optional[str] = None
+        company: Optional[str] = None,
+        visa_sponsorship: bool = False
     ):
         await interaction.response.defer(ephemeral=True)
 
@@ -78,7 +81,8 @@ class AlertsCog(commands.GroupCog, group_name="alerts"):
                 location=location,
                 company=company,
                 employment_type=emp_val,
-                min_salary=min_salary
+                min_salary=min_salary,
+                visa_sponsorship=visa_sponsorship
             )
 
         embed = discord.Embed(
@@ -95,6 +99,8 @@ class AlertsCog(commands.GroupCog, group_name="alerts"):
             embed.add_field(name="💰 Payscale Target", value=f"`{alert.min_salary}`", inline=True)
         if alert.company:
             embed.add_field(name="🏢 Company Filter", value=f"`{alert.company}`", inline=True)
+        if alert.visa_sponsorship:
+            embed.add_field(name="🛂 Visa Sponsorship", value="`Required (Verified Sponsors Only)`", inline=True)
         embed.add_field(name="⏱️ Polling Frequency", value="`Every 15 minutes` (Run `/alerts check` to test now)", inline=False)
 
         embed.set_footer(text="Manage alerts anytime with /alerts list or /alerts delete")

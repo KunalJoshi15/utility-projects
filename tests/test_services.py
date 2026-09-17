@@ -264,3 +264,45 @@ def test_salary_service_benchmarks_and_similar_roles():
         assert "glassdoor.co.in" in c["glassdoor_url"]
         assert "levels.fyi" in c["levels_url"]
 
+def test_visa_service_directory_and_jobs():
+    from services.visa_service import visa_service
+    
+    # 1. Directory lookup
+    germany_data = visa_service.get_country_directory("Germany")
+    assert germany_data is not None
+    assert "EU Blue Card" in germany_data["visa_program"]
+    assert len(germany_data["top_sponsors"]) > 0
+    assert any("Delivery Hero" in s["name"] or "Zalando" in s["name"] for s in germany_data["top_sponsors"])
+    
+    # 2. Search visa feeds
+    search_data = visa_service.search_visa_jobs("Backend Developer", "Germany")
+    assert search_data["country"] == "Germany"
+    assert "relocate.me" in search_data["feeds"]["relocate_me"]
+    assert "landing.jobs" in search_data["feeds"]["landing_jobs"]
+    assert "linkedin.com" in search_data["feeds"]["linkedin_visa"]
+    
+    # 3. Company visa intelligence check
+    intel = visa_service.check_company_visa_intel("Booking.com")
+    assert intel["is_verified_in_directory"] is True
+    assert len(intel["verified_sponsorship_tracks"]) > 0
+    assert "Netherlands" in intel["verified_sponsorship_tracks"][0]["country"]
+
+@pytest.mark.asyncio
+async def test_job_search_visa_sponsorship_feeds(test_db: AsyncSession):
+    job_svc = JobService()
+    
+    jobs = await job_svc.search_jobs(
+        db=test_db,
+        query="Full Stack Engineer",
+        country="Germany",
+        location="Berlin",
+        visa_sponsorship=True,
+        limit=5
+    )
+    assert len(jobs) > 0
+    providers = [j.provider for j in jobs]
+    assert any("Relocate.me" in p for p in providers)
+    assert any("Landing.jobs" in p for p in providers)
+    assert any(j.visa_sponsorship is not None for j in jobs)
+
+

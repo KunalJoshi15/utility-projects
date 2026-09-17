@@ -26,6 +26,7 @@ class AlertService:
         company: Optional[str] = None,
         employment_type: Optional[str] = "FULLTIME",
         min_salary: Optional[str] = None,
+        visa_sponsorship: bool = False,
     ) -> JobAlert:
         """Create a new job alert rule for a user."""
         from services.profile_service import profile_service
@@ -41,6 +42,7 @@ class AlertService:
             company=company.strip() if company else None,
             employment_type=employment_type.strip() if employment_type else "FULLTIME",
             min_salary=min_salary.strip() if min_salary else None,
+            visa_sponsorship=visa_sponsorship,
             is_active=True,
             created_at=datetime.now(timezone.utc)
         )
@@ -138,7 +140,7 @@ class AlertService:
                         if not channel:
                             continue
 
-                        # Search matching jobs strictly respecting country, location, employment_type, and salary
+                        # Search matching jobs strictly respecting country, location, employment_type, salary and visa sponsorship
                         matching_jobs = await job_service.search_jobs(
                             db=db,
                             query=alert.query,
@@ -147,6 +149,7 @@ class AlertService:
                             company_filter=alert.company,
                             min_salary=alert.min_salary,
                             employment_type=alert.employment_type,
+                            visa_sponsorship=bool(alert.visa_sponsorship),
                             limit=4
                         )
 
@@ -183,6 +186,8 @@ class AlertService:
                                 criteria_text += f" • **Salary:** `{alert.min_salary}`"
                             if alert.employment_type:
                                 criteria_text += f" • **Type:** `{alert.employment_type}`"
+                            if alert.visa_sponsorship:
+                                criteria_text += " • `🛂 Visa Sponsorship`"
 
                             await channel.send(
                                 content=f"🔔 <@{alert.discord_id}> **New Job Alert!** Found a matching opening ({criteria_text}):",

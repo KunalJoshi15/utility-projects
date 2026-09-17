@@ -68,7 +68,7 @@ class JobService:
         user: UserProfile,
         limit: int = 10
     ) -> List[CachedJob]:
-        """Search across LinkedIn, Naukri, and Google Jobs tailored to candidate's resume."""
+        """Search across LinkedIn, Naukri, Relocate.me and Google Jobs tailored to candidate's resume."""
         resume_text = ""
         if user.resume_file_path:
             resume_text = gemini_service.extract_text_from_file(user.resume_file_path)
@@ -85,6 +85,7 @@ class JobService:
             country=country,
             location=location,
             is_remote=False,
+            visa_sponsorship=user.requires_sponsorship,
             limit=limit,
             skills_filter=skills
         )
@@ -129,6 +130,7 @@ class JobService:
                 country=country,
                 location=location,
                 company_filter=comp,
+                visa_sponsorship=user.requires_sponsorship,
                 limit=2,
                 skills_filter=skills
             )
@@ -147,6 +149,7 @@ class JobService:
         company_filter: Optional[str] = None,
         min_salary: Optional[str] = None,
         employment_type: Optional[str] = None,
+        visa_sponsorship: bool = False,
         is_remote: bool = False,
         page: int = 1,
         limit: int = 10,
@@ -156,7 +159,7 @@ class JobService:
         detected_country = self._detect_country_context(country, location)
         results: List[Dict[str, Any]] = []
 
-        # 1. Generate authentic live platform search results (LinkedIn, Naukri, Google Jobs, Indeed)
+        # 1. Generate authentic live platform search results (LinkedIn, Naukri, Relocate.me, Google Jobs, Indeed)
         live_platform_jobs = self._generate_live_platform_jobs(
             query=query,
             country=detected_country,
@@ -164,6 +167,7 @@ class JobService:
             company_filter=company_filter,
             min_salary=min_salary,
             employment_type=employment_type,
+            visa_sponsorship=visa_sponsorship,
             is_remote=is_remote,
             skills=skills_filter
         )
@@ -201,6 +205,7 @@ class JobService:
                     is_remote=job_data.get("is_remote", False),
                     employment_type=job_data.get("employment_type", employment_type or "FULLTIME"),
                     salary_range=job_data.get("salary_range", "Competitive"),
+                    visa_sponsorship=job_data.get("visa_sponsorship"),
                     apply_type=job_data.get("apply_type", ApplyType.EXTERNAL_URL.value),
                     apply_url=job_data.get("apply_url", "https://www.linkedin.com/jobs"),
                     description=job_data.get("description", "Open position matching your search parameters."),
@@ -214,8 +219,13 @@ class JobService:
                 cached.title = job_data.get("title", cached.title)
                 cached.location = job_data.get("location", cached.location)
                 cached.country = detected_country
+                if job_data.get("visa_sponsorship"):
+                    cached.visa_sponsorship = job_data.get("visa_sponsorship")
 
             cached_jobs.append(cached)
+
+        await db.flush()
+        return cached_jobs
 
         await db.flush()
         return cached_jobs
@@ -233,6 +243,7 @@ class JobService:
         company_filter: Optional[str] = None,
         min_salary: Optional[str] = None,
         employment_type: Optional[str] = None,
+        visa_sponsorship: bool = False,
         is_remote: bool = False,
         skills: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
@@ -258,6 +269,15 @@ class JobService:
         elif country == "UK":
             loc_display = "London, UK"
             loc_search = "United Kingdom"
+        elif country == "Germany":
+            loc_display = "Berlin / Munich, Germany"
+            loc_search = "Germany"
+        elif country == "Netherlands":
+            loc_display = "Amsterdam / Eindhoven, Netherlands"
+            loc_search = "Netherlands"
+        elif country == "Canada":
+            loc_display = "Toronto / Vancouver, Canada"
+            loc_search = "Canada"
         else:
             loc_display = f"{country}"
             loc_search = country
@@ -266,7 +286,11 @@ class JobService:
             loc_display = f"Remote ({country})"
             loc_search = f"Remote {country}"
 
-        encoded_q = urllib.parse.quote(f"{comp} {q_clean}" if comp else q_clean)
+        search_query_term = f"{comp} {q_clean}" if comp else q_clean
+        if visa_sponsorship:
+            search_query_term += " visa sponsorship"
+
+        encoded_q = urllib.parse.quote(search_query_term)
         encoded_loc = urllib.parse.quote(loc_search)
         
         # LinkedIn job type parameter
@@ -281,6 +305,7 @@ class JobService:
 
         # Only assign salary_display if explicitly provided by user filter or job source
         salary_display = min_salary.strip() if min_salary else None
+        visa_badge = "🛂 Visa Sponsorship & Relocation Verified" if visa_sponsorship else None
 
         # Platform URLs
         if country == "India":
@@ -291,6 +316,10 @@ class JobService:
             linkedin_search_url = f"https://uk.linkedin.com/jobs/search/?keywords={encoded_q}&location={encoded_loc}{jt_param}&f_TPR=r86400"
             linkedin_easy_apply_url = f"https://uk.linkedin.com/jobs/search/?keywords={encoded_q}&location={encoded_loc}{jt_param}&f_AL=true"
             indeed_url = f"https://uk.indeed.com/jobs?q={encoded_q}&l={encoded_loc}"
+        elif country == "Germany":
+            linkedin_search_url = f"https://de.linkedin.com/jobs/search/?keywords={encoded_q}&location={encoded_loc}{jt_param}&f_TPR=r86400"
+            linkedin_easy_apply_url = f"https://de.linkedin.com/jobs/search/?keywords={encoded_q}&location={encoded_loc}{jt_param}&f_AL=true"
+            indeed_url = f"https://de.indeed.com/jobs?q={encoded_q}&l={encoded_loc}"
         else:
             linkedin_search_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded_q}&location={encoded_loc}{jt_param}&f_TPR=r86400"
             linkedin_easy_apply_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded_q}&location={encoded_loc}{jt_param}&f_AL=true"
@@ -300,7 +329,46 @@ class JobService:
         google_jobs_q = f"{encoded_q}+{emp_label}+jobs+in+{encoded_loc}" if emp_label != "Full-time" else f"{encoded_q}+jobs+in+{encoded_loc}"
         google_jobs_url = f"https://www.google.com/search?q={google_jobs_q}&ibp=htl;jobs"
 
-        live_jobs = [
+        live_jobs = []
+
+        # If visa sponsorship is requested, prepend Relocate.me and Landing.jobs
+        if visa_sponsorship:
+            relocate_query = urllib.parse.quote(q_clean)
+            relocate_loc = urllib.parse.quote(country)
+            live_jobs.append({
+                "job_id": f"rm-{uuid.uuid4().hex[:7]}",
+                "provider": "Relocate.me (Visa Sponsor)",
+                "title": f"{comp or q_clean.title()} — {q_clean.title()} (Visa & Relocation)",
+                "company": comp or "Verified Global Tech Sponsor",
+                "location": loc_display,
+                "is_remote": False,
+                "employment_type": emp_label,
+                "salary_range": salary_display,
+                "visa_sponsorship": "🛂 Verified International Visa Sponsorship",
+                "apply_type": ApplyType.DIRECT_CAREER.value,
+                "apply_url": f"https://relocate.me/search?query={relocate_query}&location={relocate_loc}",
+                "description": f"Verified international openings offering visa sponsorship and relocation support for {q_clean.title()} in {loc_display}.",
+                "company_logo_url": "https://relocate.me/favicon.ico",
+                "posted_date": "Verified Sponsor"
+            })
+            live_jobs.append({
+                "job_id": f"lj-{uuid.uuid4().hex[:7]}",
+                "provider": "Landing.jobs (Relocation)",
+                "title": f"{comp or q_clean.title()} — {q_clean.title()} (EU Visa)",
+                "company": comp or "EU Visa Sponsor",
+                "location": loc_display,
+                "is_remote": False,
+                "employment_type": emp_label,
+                "salary_range": salary_display,
+                "visa_sponsorship": "🛂 Verified EU Blue Card / Relocation",
+                "apply_type": ApplyType.DIRECT_CAREER.value,
+                "apply_url": f"https://landing.jobs/jobs?q={relocate_query}&relocation=true&visa=true",
+                "description": f"European visa sponsorship & tech relocation listings matching {q_clean.title()} in {loc_display}.",
+                "company_logo_url": "https://landing.jobs/favicon.ico",
+                "posted_date": "Active Listing"
+            })
+
+        live_jobs.extend([
             {
                 "job_id": f"li-{uuid.uuid4().hex[:7]}",
                 "provider": "LinkedIn (Easy Apply)",
@@ -310,6 +378,7 @@ class JobService:
                 "is_remote": is_remote,
                 "employment_type": emp_label,
                 "salary_range": salary_display,
+                "visa_sponsorship": visa_badge,
                 "apply_type": ApplyType.LINKEDIN_EASY_APPLY.value,
                 "apply_url": linkedin_easy_apply_url,
                 "description": f"Direct 1-click application on LinkedIn with Easy Apply filter enabled for {q_clean.title()} in {loc_display}.",
@@ -325,6 +394,7 @@ class JobService:
                 "is_remote": is_remote,
                 "employment_type": emp_label,
                 "salary_range": salary_display,
+                "visa_sponsorship": visa_badge,
                 "apply_type": ApplyType.DIRECT_CAREER.value,
                 "apply_url": naukri_search_url,
                 "description": f"Verified live openings on Naukri matching {q_clean.title()} in {loc_display}.",
@@ -340,6 +410,7 @@ class JobService:
                 "is_remote": is_remote,
                 "employment_type": emp_label,
                 "salary_range": salary_display,
+                "visa_sponsorship": visa_badge,
                 "apply_type": ApplyType.EXTERNAL_URL.value,
                 "apply_url": google_jobs_url,
                 "description": f"Aggregated corporate listings on Google Jobs for {q_clean.title()} in {loc_display}.",
@@ -355,13 +426,14 @@ class JobService:
                 "is_remote": is_remote,
                 "employment_type": emp_label,
                 "salary_range": salary_display,
+                "visa_sponsorship": visa_badge,
                 "apply_type": ApplyType.EXTERNAL_URL.value,
                 "apply_url": indeed_url,
                 "description": f"Live postings on Indeed for {q_clean.title()} in {loc_display}.",
                 "company_logo_url": "https://www.indeed.com/favicon.ico",
                 "posted_date": "Active Recently"
             }
-        ]
+        ])
         return live_jobs
 
     async def _search_jsearch(

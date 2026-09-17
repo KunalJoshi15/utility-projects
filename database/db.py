@@ -45,14 +45,19 @@ async def init_db() -> None:
                         await conn.execute(text("ALTER TABLE job_alerts ADD COLUMN employment_type VARCHAR(50) DEFAULT 'FULLTIME'"))
                     if "min_salary" not in existing_alert_cols:
                         await conn.execute(text("ALTER TABLE job_alerts ADD COLUMN min_salary VARCHAR(100)"))
+                    if "visa_sponsorship" not in existing_alert_cols:
+                        await conn.execute(text("ALTER TABLE job_alerts ADD COLUMN visa_sponsorship BOOLEAN DEFAULT 0"))
                 
                 # Check cached_jobs columns
                 job_cols = await conn.execute(
                     text("PRAGMA table_info(cached_jobs)")
                 )
                 existing_job_cols = [row[1] for row in job_cols.fetchall()]
-                if existing_job_cols and "country" not in existing_job_cols:
-                    await conn.execute(text("ALTER TABLE cached_jobs ADD COLUMN country VARCHAR(100)"))
+                if existing_job_cols:
+                    if "country" not in existing_job_cols:
+                        await conn.execute(text("ALTER TABLE cached_jobs ADD COLUMN country VARCHAR(100)"))
+                    if "visa_sponsorship" not in existing_job_cols:
+                        await conn.execute(text("ALTER TABLE cached_jobs ADD COLUMN visa_sponsorship VARCHAR(100)"))
 
                 # Check user_profiles columns
                 profile_cols = await conn.execute(

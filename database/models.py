@@ -79,6 +79,7 @@ class CachedJob(Base):
     is_remote = Column(Boolean, default=False)
     employment_type = Column(String(50), nullable=True)
     salary_range = Column(String(100), nullable=True)
+    visa_sponsorship = Column(String(100), nullable=True)
     apply_type = Column(String(50), default=ApplyType.EXTERNAL_URL.value)
     apply_url = Column(Text, nullable=False)
     description = Column(Text, nullable=True)
@@ -121,6 +122,7 @@ class JobAlert(Base):
     company = Column(String(150), nullable=True)
     employment_type = Column(String(50), nullable=True, default="FULLTIME")
     min_salary = Column(String(100), nullable=True)
+    visa_sponsorship = Column(Boolean, default=False)
     
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=get_utc_now)

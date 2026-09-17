@@ -32,6 +32,9 @@ def create_job_embed(job: CachedJob, current_idx: int = 1, total_count: int = 1)
     if job.company and "Live" not in job.company and "Portal" not in job.company:
         embed.add_field(name="🏢 Company", value=f"`{job.company}`", inline=True)
 
+    if job.visa_sponsorship:
+        embed.add_field(name="🛂 Visa / Relocation", value=f"`{job.visa_sponsorship}`", inline=True)
+
     # AmbitionBox & Glassdoor salary estimation links & similar roles
     benchmarks = salary_service.get_salary_benchmarks(job.title, job.company, job.country)
     ab = benchmarks["ambitionbox"]
@@ -84,6 +87,9 @@ def create_job_detail_embed(job: CachedJob) -> discord.Embed:
         
     if job.company and "Live" not in job.company and "Portal" not in job.company:
         embed.add_field(name="🏢 Company", value=f"`{job.company}`", inline=True)
+
+    if job.visa_sponsorship:
+        embed.add_field(name="🛂 Visa / Relocation", value=f"`{job.visa_sponsorship}`", inline=True)
 
     benchmarks = salary_service.get_salary_benchmarks(job.title, job.company, job.country)
     ab = benchmarks["ambitionbox"]
@@ -370,6 +376,127 @@ def create_salary_comparison_embed(comparison: Dict[str, Any]) -> discord.Embed:
     embed.set_footer(text="Data source: AmbitionBox & Glassdoor • Use /profile companies to manage targets.")
     return embed
 
+def create_visa_directory_embed(country_name: str, dir_data: Dict[str, Any]) -> discord.Embed:
+    """Format verified visa-sponsoring employers directory embed for a country."""
+    flag = dir_data.get("flag", "🌍")
+    region = dir_data.get("region", country_name)
+    program = dir_data.get("visa_program", "Work Visa / Permanent Residency")
+    threshold = dir_data.get("tech_salary_threshold", "Standard going rate")
+    reg_url = dir_data.get("official_register_url", "https://google.com")
+
+    embed = discord.Embed(
+        title=f"{flag} Verified Visa Sponsorship Directory: {region}",
+        description=f"**Visa Scheme:** {program}\n"
+                    f"**Tech Benchmark / Salary Threshold:** `{threshold}`\n"
+                    f"**Official Government Register:** [View Official Register & Regulations]({reg_url})",
+        color=0x3498DB
+    )
+
+    # Top Verified Sponsoring Employers
+    sponsors = dir_data.get("top_sponsors", [])
+    if sponsors:
+        sponsor_lines = []
+        for s in sponsors[:8]:
+            sponsor_lines.append(f"• [**{s['name']}**]({s['career_url']}) — *{s['notes']}*")
+        embed.add_field(
+            name="🏢 Top Verified Employers Actively Sponsoring",
+            value="\n".join(sponsor_lines),
+            inline=False
+        )
+
+    # Dedicated Relocation & Visa Job Boards
+    boards = dir_data.get("job_boards", [])
+    if boards:
+        board_lines = [f"• [**{b['name']}**]({b['url']})" for b in boards]
+        embed.add_field(
+            name="🌐 International Relocation Job Feeds",
+            value="\n".join(board_lines),
+            inline=False
+        )
+
+    embed.set_footer(text="Data strictly verified via official government registers • Run /visa jobs to search openings.")
+    return embed
+
+def create_visa_jobs_search_embed(search_data: Dict[str, Any]) -> discord.Embed:
+    """Format visa sponsorship job search aggregator embed."""
+    role = search_data["role"]
+    country = search_data["country"]
+    country_info = search_data.get("country_info", {})
+    flag = country_info.get("flag", "🌍")
+    feeds = search_data["feeds"]
+
+    embed = discord.Embed(
+        title=f"🛂 International Visa Sponsored Openings: {role} ({flag} {country})",
+        description=f"Curated live destination feeds for international candidates seeking relocation & visa sponsorship in **{country}**:",
+        color=0x2ECC71
+    )
+
+    feed_lines = [
+        f"• [✈️ **Relocate.me Openings ({role} in {country})**]({feeds['relocate_me']})",
+        f"• [💼 **LinkedIn Visa Sponsorship Filter**]({feeds['linkedin_visa']})",
+        f"• [🇪🇺 **Landing.jobs Relocation & Visa Feed**]({feeds['landing_jobs']})",
+        f"• [🔍 **Indeed International Visa Feed**]({feeds['indeed_visa']})",
+        f"• [🌐 **Google Jobs International Visa Feed**]({feeds['google_jobs_visa']})",
+        f"• [📊 **Levels.fyi H-1B / Visa Compensation**]({feeds['levels_h1b']})"
+    ]
+    embed.add_field(
+        name="🔗 Verified Visa & Relocation Job Feeds",
+        value="\n".join(feed_lines),
+        inline=False
+    )
+
+    top_sponsors = search_data.get("top_sponsors", [])
+    if top_sponsors:
+        s_lines = [f"• [**{s['name']}**]({s['career_url']}) (*{s['notes']}*)" for s in top_sponsors[:5]]
+        embed.add_field(
+            name=f"🏢 Top Employers in {country} with Active Sponsorship",
+            value="\n".join(s_lines),
+            inline=False
+        )
+
+    embed.set_footer(text="Verified genuine international portals • No misleading visa claims.")
+    return embed
+
+def create_visa_company_intel_embed(intel: Dict[str, Any]) -> discord.Embed:
+    """Format company visa sponsorship track record & registry checker embed."""
+    comp = intel["company"]
+    is_verified = intel["is_verified_in_directory"]
+    tracks = intel.get("verified_sponsorship_tracks", [])
+    reg = intel["registry_links"]
+
+    status_badge = "✅ Verified International Sponsor" if is_verified else "ℹ️ Check Public Sponsor Registries"
+
+    embed = discord.Embed(
+        title=f"🛂 Visa Sponsorship Intelligence: {comp}",
+        description=f"**Status:** `{status_badge}`",
+        color=COLOR_SUCCESS if is_verified else COLOR_PRIMARY
+    )
+
+    if tracks:
+        for t in tracks[:3]:
+            track_text = (
+                f"**Country/Hub:** {t['flag']} {t['country']}\n"
+                f"**Visa Scheme:** {t['visa_program']}\n"
+                f"**Details:** {t['notes']}\n"
+                f"**Portal:** [Direct Careers Page]({t['career_url']}) • [Government Register]({t['official_register_url']})"
+            )
+            embed.add_field(name=f"📍 {t['flag']} {t['country']} Sponsorship Track", value=track_text, inline=False)
+
+    checker_lines = [
+        f"• [🇬🇧 **UK Home Office Register of Licensed Sponsors**]({reg['uk_home_office']})",
+        f"• [🇺🇸 **Levels.fyi H-1B & Visa Salary Database**]({reg['levels_fyi']})",
+        f"• [📊 **MyVisaJobs H-1B & Green Card Records**]({reg['myvisajobs']})",
+        f"• [💼 **LinkedIn {comp} Visa Job Postings**]({reg['linkedin_visa_jobs']})"
+    ]
+    embed.add_field(
+        name="🔍 Official Registry & Transparency Checkers",
+        value="\n".join(checker_lines),
+        inline=False
+    )
+
+    embed.set_footer(text="Always confirm specific role eligibility on the employer's official job description.")
+    return embed
+
 def create_help_embed() -> discord.Embed:
     """Format help instructions embed."""
     embed = discord.Embed(
@@ -380,7 +507,7 @@ def create_help_embed() -> discord.Embed:
     
     embed.add_field(
         name="🔍 Job Search Commands",
-        value="• `/jobs search <query> [location] [type] [salary] [company]` - Search live listings (LinkedIn, Naukri, Google Jobs)\n"
+        value="• `/jobs search <query> [location] [type] [salary] [company] [visa_sponsorship]` - Search live listings (LinkedIn, Naukri, Relocate.me, Google Jobs)\n"
               "• `/jobs match` - Auto-match jobs based on your uploaded resume\n"
               "• `/jobs companies [names]` - View open vacancies across your target dream companies\n"
               "• `/jobs view <job_id>` - View full description, requirements & live links\n"
@@ -388,6 +515,14 @@ def create_help_embed() -> discord.Embed:
         inline=False
     )
     
+    embed.add_field(
+        name="🛂 Visa Sponsorship & Relocation Commands",
+        value="• `/visa companies [country]` - Browse top verified employers offering visa sponsorship in Germany, UK, Netherlands, Canada, USA, SG, UAE\n"
+              "• `/visa jobs <role> [country]` - Search verified relocation & visa openings across Relocate.me, Landing.jobs & LinkedIn\n"
+              "• `/visa policy <company>` - Check official visa sponsorship track record & government registry status",
+        inline=False
+    )
+
     embed.add_field(
         name="💰 Salary & Market Benchmark Commands",
         value="• `/salary check <role> [company] [location]` - Look up authentic AmbitionBox & Glassdoor benchmarks for role & similar roles\n"
@@ -397,7 +532,7 @@ def create_help_embed() -> discord.Embed:
 
     embed.add_field(
         name="🔔 Automated Job Alerts",
-        value="• `/alerts create <query> [location] [company] [min_salary]` - Get tagged when new jobs appear\n"
+        value="• `/alerts create <query> [location] [company] [min_salary] [visa_sponsorship]` - Get tagged when new jobs appear\n"
               "• `/alerts companies [role] [min_salary]` - Batch create 24/7 alerts for all your dream companies\n"
               "• `/alerts list` - View your active job alerts\n"
               "• `/alerts delete <alert_id>` - Delete an alert rule",
