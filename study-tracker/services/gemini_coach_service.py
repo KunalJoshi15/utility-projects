@@ -60,9 +60,9 @@ SAMPLE_QUIZZES = {
 class GeminiCoachService:
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
-        self.apienx_api_key = settings.APIENX_API_KEY
-        self.apienx_base_url = settings.APIENX_BASE_URL.rstrip('/') if settings.APIENX_BASE_URL else "https://api.apienx.com/v1"
-        self.ai_provider = settings.AI_PROVIDER.lower() if settings.AI_PROVIDER else "apienx"
+        self.apinex_api_key = getattr(settings, "APINEX_API_KEY", None) or settings.APIENX_API_KEY
+        self.apinex_base_url = (getattr(settings, "APINEX_BASE_URL", None) or settings.APIENX_BASE_URL or "https://api.apinex.bond/v1").rstrip('/')
+        self.ai_provider = (settings.AI_PROVIDER or "apinex").lower()
         self.model_name = settings.GEMINI_MODEL
         self.client = None
         if _GENAI_AVAILABLE and self.api_key and "AIza" in self.api_key:
@@ -72,12 +72,12 @@ class GeminiCoachService:
                 logger.warning(f"Could not initialize GenAI client: {e}")
 
     async def _call_ai_model(self, prompt: str) -> Optional[str]:
-        """Send prompt to APIENX OpenAI-compatible endpoint or Google GenAI SDK."""
-        # 1. Try APIENX if configured
-        if (self.ai_provider == "apienx" or self.apienx_api_key) and self.apienx_api_key:
-            url = f"{self.apienx_base_url}/chat/completions"
+        """Send prompt to APInex OpenAI-compatible endpoint or Google GenAI SDK."""
+        # 1. Try APInex if configured
+        if (self.ai_provider in ("apinex", "apienx") or self.apinex_api_key) and self.apinex_api_key:
+            url = f"{self.apinex_base_url}/chat/completions"
             headers = {
-                "Authorization": f"Bearer {self.apienx_api_key}",
+                "Authorization": f"Bearer {self.apinex_api_key}",
                 "Content-Type": "application/json"
             }
             payload = {
@@ -95,12 +95,12 @@ class GeminiCoachService:
                             data = await resp.json()
                             if "choices" in data and len(data["choices"]) > 0:
                                 return data["choices"][0]["message"]["content"]
-                            logger.warning(f"Unexpected response structure from APIENX: {data}")
+                            logger.warning(f"Unexpected response structure from APInex: {data}")
                         else:
                             error_text = await resp.text()
-                            logger.warning(f"APIENX request failed with status {resp.status}: {error_text}")
+                            logger.warning(f"APInex request failed with status {resp.status}: {error_text}")
             except Exception as e:
-                logger.error(f"Error calling APIENX AI gateway: {e}")
+                logger.error(f"Error calling APInex AI gateway: {e}")
 
         # 2. Fallback to Google GenAI Client if available
         if self.client:
