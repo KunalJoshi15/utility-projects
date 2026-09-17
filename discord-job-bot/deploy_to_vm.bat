@@ -8,7 +8,7 @@ echo ===================================================
 
 echo.
 echo [1/2] Syncing updated source files to GCP VM...
-gcloud.cmd compute scp --recurse bot services database tests main.py docker-compose.yml instance-20260917-061701:/opt/discord-job-bot/ --zone=us-central1-a --project=seraphic-rune-366616
+gcloud.cmd compute scp --recurse bot services database config tests main.py docker-compose.yml instance-20260917-061701:/opt/discord-job-bot/ --zone=us-central1-a --project=seraphic-rune-366616
 
 if %ERRORLEVEL% NEQ 0 (
     echo ❌ File sync failed. Check your gcloud authentication.
