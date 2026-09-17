@@ -1,0 +1,167 @@
+import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from database.models import Base, UserProfile, CachedJob, JobApplication, JobAlert, AlertNotification, ApplyStatus, ApplyType
+from services.profile_service import ProfileService
+from services.job_service import JobService
+from services.apply_service import ApplyService
+from services.gemini_service import GeminiResumeService
+from services.alert_service import AlertService
+
+TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+@pytest_asyncio.fixture
+async def test_db():
+    engine = create_async_engine(TEST_DB_URL, echo=False)
+    async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with async_session() as session:
+        yield session
+
+    await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_profile_service_crud_and_encryption(test_db: AsyncSession):
+    profile_svc = ProfileService()
+    
+    # 1. Create Profile
+    user = await profile_svc.get_or_create_profile(test_db, "123456789", "testuser")
+    assert user.discord_id == "123456789"
+    assert user.username == "testuser"
+
+    # 2. Update Profile
+    updated = await profile_svc.update_profile(
+        db=test_db,
+        discord_id="123456789",
+        full_name="Alice Developer",
+        email="alice@example.com",
+        phone="+1234567890",
+        city="San Francisco",
+        country="USA",
+        years_of_experience=5,
+        notice_period_days=15
+    )
+    assert updated.full_name == "Alice Developer"
+    assert updated.email == "alice@example.com"
+    assert updated.years_of_experience == 5
+
+    # 3. Test Cookie Encryption & Decryption
+    secret_cookie = "AQEDATz0_secret_cookie_token_123"
+    await profile_svc.save_linkedin_cookie(test_db, "123456789", secret_cookie)
+    assert updated.linkedin_cookie_enc != secret_cookie
+    decrypted = profile_svc.get_decrypted_linkedin_cookie(updated)
+    assert decrypted == secret_cookie
+
+@pytest.mark.asyncio
+async def test_job_service_live_url_generation(test_db: AsyncSession):
+    job_svc = JobService()
+
+    # Search jobs
+    jobs = await job_svc.search_jobs(
+        db=test_db,
+        query="Python Developer",
+        location="Bengaluru",
+        is_remote=False,
+        limit=5
+    )
+    assert len(jobs) > 0
+    first_job = jobs[0]
+    assert first_job.job_id is not None
+    # Verify live URLs contain direct platform domains
+    assert any(domain in first_job.apply_url for domain in ["linkedin.com", "naukri.com", "google.com", "indeed.com", "remotive.com"])
+
+@pytest.mark.asyncio
+async def test_alert_service_crud(test_db: AsyncSession):
+    alert_svc = AlertService()
+    
+    # Create Alert with all filters
+    alert = await alert_svc.create_alert(
+        db=test_db,
+        discord_id="123456789",
+        channel_id="9876543210",
+        guild_id="111222333",
+        query="Senior Backend Engineer",
+        country="India",
+        location="Bengaluru",
+        company="Google",
+        employment_type="FULLTIME",
+        min_salary="₹ 35 LPA"
+    )
+    assert alert.id is not None
+    assert alert.query == "Senior Backend Engineer"
+    assert alert.country == "India"
+    assert alert.location == "Bengaluru"
+    assert alert.company == "Google"
+    assert alert.employment_type == "FULLTIME"
+    assert alert.min_salary == "₹ 35 LPA"
+
+    # List alerts
+    alerts = await alert_svc.get_user_alerts(test_db, "123456789")
+    assert len(alerts) == 1
+    assert alerts[0].id == alert.id
+    assert alerts[0].country == "India"
+    assert alerts[0].min_salary == "₹ 35 LPA"
+
+    # Delete alert
+    deleted = await alert_svc.delete_alert(test_db, alert.id, "123456789")
+    assert deleted is True
+    remaining = await alert_svc.get_user_alerts(test_db, "123456789")
+    assert len(remaining) == 0
+
+@pytest.mark.asyncio
+async def test_job_service_country_isolation_india(test_db: AsyncSession):
+    job_svc = JobService()
+
+    # Search with country="India"
+    jobs = await job_svc.search_jobs(
+        db=test_db,
+        query="Java Developer",
+        country="India",
+        location="Pune",
+        employment_type="INTERN",
+        min_salary="₹ 12 LPA",
+        limit=5
+    )
+    assert len(jobs) > 0
+    for job in jobs:
+        assert job.country == "India"
+        assert "₹" in job.salary_range or "LPA" in job.salary_range or "12 LPA" in job.salary_range
+        assert any(domain in job.apply_url for domain in ["in.linkedin.com", "naukri.com", "google.com", "in.indeed.com"])
+        assert "f_JT=I" in job.apply_url or "naukri.com" in job.apply_url or "google.com" in job.apply_url or "indeed.com" in job.apply_url
+
+@pytest.mark.asyncio
+async def test_gemini_resume_review_heuristic():
+    gemini_svc = GeminiResumeService()
+    sample_resume = (
+        "John Doe - Backend Software Engineer\n"
+        "Experience: Responsible for writing Python and Java code. Worked on bug fixes.\n"
+        "Skills: Python, SQL, Git, Docker."
+    )
+    review = await gemini_svc.analyze_resume(sample_resume)
+    assert "ats_score" in review
+    assert isinstance(review["ats_score"], int)
+    assert len(review["weaknesses_and_flaws"]) > 0
+    assert len(review["actionable_recommendations"]) > 0
+
+@pytest.mark.asyncio
+async def test_gemini_resume_profile_extraction():
+    gemini_svc = GeminiResumeService()
+    sample_resume = (
+        "Jane Smith\n"
+        "Senior Frontend Engineer with 4 years experience in React, TypeScript, Node.js, and AWS.\n"
+    )
+    profile_data = await gemini_svc.extract_resume_profile(sample_resume)
+    assert "primary_role" in profile_data
+    assert "skills" in profile_data
+    assert len(profile_data["skills"]) > 0
+
+def test_apply_type_detection():
+    job_svc = JobService()
+    assert job_svc._determine_apply_type("https://www.linkedin.com/jobs/view/123", True) == ApplyType.LINKEDIN_EASY_APPLY.value
+    assert job_svc._determine_apply_type("https://www.naukri.com/job-listings-123", False) == ApplyType.DIRECT_CAREER.value
+    assert job_svc._determine_apply_type("https://boards.greenhouse.io/stripe/jobs/456", False) == ApplyType.ATS_PORTAL.value
+    assert job_svc._determine_apply_type("https://jobs.lever.co/airbnb/789", False) == ApplyType.ATS_PORTAL.value
+    assert job_svc._determine_apply_type("https://careers.google.com/jobs/123", False) == ApplyType.DIRECT_CAREER.value

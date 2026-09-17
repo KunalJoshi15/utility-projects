@@ -1,0 +1,40 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
+.env
+.env.local
+.venv/
+env/
+venv/
+ENV/
+
+# Database and uploaded files
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Playwright artifacts & recordings
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,30 @@
+# Discord Bot Core
+discord.py>=2.3.2
+
+# Async HTTP & Web Scraping
+aiohttp>=3.9.1
+beautifulsoup4>=4.12.2
+requests>=2.31.0
+
+# Database & Storage
+aiosqlite>=0.19.0
+SQLAlchemy>=2.0.25
+
+# Browser Automation & Stealth
+playwright>=1.41.0
+playwright-stealth>=1.0.6
+
+# Google Gemini AI & PDF Parsing
+google-genai>=0.1.1
+pypdf>=3.17.0
+
+# Configuration & Security
+pydantic>=2.5.3
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+cryptography>=41.0.7
+
+# CLI & Utilities
+tabulate>=0.9.0
+pytest>=7.4.3
+pytest-asyncio>=0.23.3

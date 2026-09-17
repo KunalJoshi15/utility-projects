@@ -1,0 +1,27 @@
+services:
+  discord-job-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: discord_job_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Mount application code so code updates reflect immediately
+      - ./bot:/app/bot
+      - ./services:/app/services
+      - ./config:/app/config
+      - ./database:/app/database
+      - ./main.py:/app/main.py
+      # Persist database and uploaded resumes
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HEADLESS_BROWSER=true
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+        reservations:
+          memory: 512M
