@@ -50,8 +50,10 @@ An advanced, multi-user Discord bot powered by **Python**, **discord.py**, **Goo
 ---
 
 ### 2. [📚 Study Tracker Bot](./study-tracker/README.md)
-A dedicated interview preparation and career progress tracking bot:
-- **📝 Study Logging & Roadmaps**: Log preparation across DSA, LLD, HLD, and Core CS with confidence scores & notes.
+A dedicated interview preparation, learning resources, and career progress tracking bot:
+- **☸️ Microservices & Kubernetes Roadmap**: Comprehensive curriculum covering Kubernetes (Pods, Deployments, Ingress, HPA, Helm), Docker, Saga Pattern, CQRS, Istio Service Mesh, Kafka, and OpenTelemetry/Jaeger observability.
+- **📚 Curated & Community Resource Catalog**: Seeded guides from K8s, Microservices.io, NeetCode, Striver + community links with upvoting (`/study resources`, `/study resource_add`, `/study resource_modal`, `/study upvote`).
+- **📝 Study Logging & Roadmaps**: Log preparation across Microservices, DSA, LLD, HLD, and Core CS with confidence scores & notes.
 - **📊 Visual Progress Scorecards**: Progress bars, weekly momentum, and hours breakdown (`/study progress`).
 - **🔥 Daily Study Streaks**: Daily streak tracking with milestone badges (`/study streak`).
 - **⏱️ Pomodoro Focus Timer**: 25m/custom study blocks with 1-click auto-logging (`/study timer`, `/study pomodoro`).

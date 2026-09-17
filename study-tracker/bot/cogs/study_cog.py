@@ -8,19 +8,31 @@ from bot.ui.embeds import (
     create_progress_embed,
     create_streak_embed,
     create_roadmap_embed,
+    create_resources_embed,
     COLOR_SUCCESS,
     COLOR_PRIMARY
 )
-from bot.ui.modals import QuickStudyLogModal, CreateGoalModal
+from bot.ui.modals import QuickStudyLogModal, CreateGoalModal, AddResourceModal
 from bot.ui.views import RoadmapSelectView
 
 CATEGORY_CHOICES = [
     app_commands.Choice(name="🧩 DSA (Data Structures & Algorithms)", value="DSA"),
     app_commands.Choice(name="🏗️ LLD (Low-Level Design & Patterns)", value="LLD"),
     app_commands.Choice(name="🌐 HLD (High-Level System Design)", value="HLD"),
+    app_commands.Choice(name="☸️ Microservices & Kubernetes", value="MICROSERVICES"),
     app_commands.Choice(name="💻 Core CS (OS, DBMS, Concurrency)", value="CORE_CS"),
     app_commands.Choice(name="🎤 Mock Interview & Behavioral", value="MOCK_INTERVIEW"),
     app_commands.Choice(name="🎯 Custom Topic", value="CUSTOM"),
+]
+
+RESOURCE_TYPE_CHOICES = [
+    app_commands.Choice(name="📖 Documentation", value="DOCUMENTATION"),
+    app_commands.Choice(name="📝 Article / Deep Dive", value="ARTICLE"),
+    app_commands.Choice(name="🧩 Practice Set / Problems", value="PRACTICE"),
+    app_commands.Choice(name="⚡ Cheatsheet / Reference", value="CHEATSHEET"),
+    app_commands.Choice(name="🐙 GitHub Repository", value="REPO"),
+    app_commands.Choice(name="🎥 Video / Course", value="VIDEO"),
+    app_commands.Choice(name="📕 Book", value="BOOK"),
 ]
 
 CONFIDENCE_CHOICES = [
@@ -112,13 +124,14 @@ class StudyCog(commands.GroupCog, group_name="study"):
         embed = create_streak_embed(streak_data, interaction.user.display_name or interaction.user.name)
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="roadmap", description="Browse structured preparation roadmaps for DSA, LLD, HLD & Core CS")
+    @app_commands.command(name="roadmap", description="Browse structured preparation roadmaps for DSA, LLD, HLD, Microservices (K8s) & Core CS")
     @app_commands.describe(category="Select curriculum category")
     @app_commands.choices(
         category=[
             app_commands.Choice(name="🧩 DSA (Data Structures & Algorithms)", value="DSA"),
             app_commands.Choice(name="🏗️ LLD (Low-Level Design & Patterns)", value="LLD"),
             app_commands.Choice(name="🌐 HLD (High-Level System Design)", value="HLD"),
+            app_commands.Choice(name="☸️ Microservices & Kubernetes", value="MICROSERVICES"),
             app_commands.Choice(name="💻 Core CS (OS, DBMS, Concurrency)", value="CORE_CS"),
         ]
     )
@@ -129,6 +142,92 @@ class StudyCog(commands.GroupCog, group_name="study"):
         embed = create_roadmap_embed(roadmap)
         view = RoadmapSelectView()
         await interaction.followup.send(embed=embed, view=view)
+
+    @app_commands.command(name="resources", description="Browse curated documentation, tools (K8s/Kafka), and community resources")
+    @app_commands.describe(
+        category="Filter resources by topic domain (DSA, LLD, HLD, Microservices, Core CS)",
+        topic="Search by keyword (e.g. 'Kubernetes', 'Saga', 'Kafka', 'Dynamic Programming')"
+    )
+    @app_commands.choices(category=CATEGORY_CHOICES)
+    async def browse_resources(
+        self,
+        interaction: discord.Interaction,
+        category: Optional[app_commands.Choice[str]] = None,
+        topic: Optional[str] = None
+    ):
+        await interaction.response.defer(ephemeral=False)
+        cat_val = category.value if category else None
+        async with get_db() as db:
+            resources = await study_service.get_resources(db, category=cat_val, topic=topic)
+
+        embed = create_resources_embed(resources, category=cat_val)
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="resource_add", description="Submit a useful preparation resource or tool link to the community catalog")
+    @app_commands.describe(
+        category="Category of resource (DSA, LLD, HLD, Microservices, Core CS)",
+        topic="Specific topic or tool (e.g. 'Kubernetes Ingress', 'Saga Pattern', 'DP Memoization')",
+        title="Title of the resource / article",
+        url="URL / Link to the resource",
+        resource_type="Format of resource (Documentation, Article, Practice, Cheatsheet, Repo, Video)",
+        description="Key takeaways or description of why this resource is valuable"
+    )
+    @app_commands.choices(
+        category=CATEGORY_CHOICES,
+        resource_type=RESOURCE_TYPE_CHOICES
+    )
+    async def add_resource_cmd(
+        self,
+        interaction: discord.Interaction,
+        category: app_commands.Choice[str],
+        topic: str,
+        title: str,
+        url: str,
+        resource_type: Optional[app_commands.Choice[str]] = None,
+        description: Optional[str] = None
+    ):
+        await interaction.response.defer(ephemeral=True)
+        r_type = resource_type.value if resource_type else "ARTICLE"
+
+        async with get_db() as db:
+            res = await study_service.add_resource(
+                db=db,
+                category=category.value,
+                topic=topic,
+                title=title,
+                url=url,
+                resource_type=r_type,
+                description=description,
+                added_by_discord_id=str(interaction.user.id),
+                added_by_name=interaction.user.name
+            )
+
+        await interaction.followup.send(
+            f"🎉 **Resource Added Successfully!**\n"
+            f"📌 **[{res.title}]({res.url})**\n"
+            f"• **Category:** `{res.category}` > `{res.topic}` • **Type:** `{res.resource_type}`\n"
+            f"View all resources with `/study resources`.",
+            ephemeral=True
+        )
+
+    @app_commands.command(name="resource_modal", description="Open an interactive popup form to submit a new preparation resource")
+    async def resource_modal_cmd(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AddResourceModal())
+
+    @app_commands.command(name="upvote", description="Upvote a helpful preparation resource by its ID")
+    @app_commands.describe(resource_id="ID of the resource to upvote")
+    async def upvote_resource_cmd(self, interaction: discord.Interaction, resource_id: int):
+        await interaction.response.defer(ephemeral=True)
+        async with get_db() as db:
+            updated = await study_service.upvote_resource(db, resource_id)
+
+        if updated:
+            await interaction.followup.send(
+                f"👍 **Upvoted!** Resource **'{updated.title}'** now has `{updated.upvotes}` upvotes.",
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send(f"❌ Resource with ID `#{resource_id}` was not found.", ephemeral=True)
 
     @app_commands.command(name="goals", description="View and track your active preparation goals and milestones")
     async def list_goals(self, interaction: discord.Interaction):

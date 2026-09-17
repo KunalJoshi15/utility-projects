@@ -280,22 +280,69 @@ def create_pomodoro_embed(session_data: Dict[str, Any]) -> discord.Embed:
     embed.set_footer(text="Pomodoro Focus Timer • Study Tracker Bot")
     return embed
 
+def create_resources_embed(resources: List[Dict[str, Any]], category: Optional[str] = None) -> discord.Embed:
+    """Format curated and community preparation resources embed."""
+    cat_title = f" ({category.upper()})" if category else ""
+    embed = discord.Embed(
+        title=f"📚 Interview & Prep Learning Resources{cat_title}",
+        description="Curated documentation, interactive tutorials, architecture blueprints & practice sets:",
+        color=COLOR_SUCCESS
+    )
+
+    if not resources:
+        embed.description = "ℹ️ No resources found for this filter. Add one with `/study resource_add`!"
+        return embed
+
+    type_emojis = {
+        "DOCUMENTATION": "📖",
+        "ARTICLE": "📝",
+        "PRACTICE": "🧩",
+        "CHEATSHEET": "⚡",
+        "REPO": "🐙",
+        "VIDEO": "🎥",
+        "BOOK": "📕"
+    }
+
+    for idx, r in enumerate(resources[:10], 1):
+        emoji = type_emojis.get(r.get("type", "").upper(), "🔗")
+        field_value = (
+            f"• **Type:** `{r.get('type')}` • **Added By:** `{r.get('added_by')}` • 👍 `{r.get('upvotes', 1)}`\n"
+            f"• {r.get('description', '')}\n"
+            f"• **[👉 Click Here to Open Resource]({r.get('url')})**"
+        )
+        embed.add_field(
+            name=f"{idx}. {emoji} {r.get('title')} ({r.get('category')})",
+            value=field_value,
+            inline=False
+        )
+
+    embed.set_footer(text="Add your own favorite resources with /study resource_add or /study resource_modal")
+    return embed
+
 def create_help_embed() -> discord.Embed:
     """Format Study Tracker Bot help documentation."""
     embed = discord.Embed(
         title="📚 Study Tracker & Interview Preparation Bot",
-        description="Track your interview preparation, build daily streaks, practice with AI interview coaches, and access structured DSA, LLD, and HLD roadmaps.",
+        description="Track your interview preparation, build daily streaks, practice with AI interview coaches, and access structured DSA, LLD, HLD, and Microservices/K8s roadmaps.",
         color=COLOR_PRIMARY
     )
 
     embed.add_field(
         name="📝 Study Logging & Progress",
-        value="• `/study log <category> <topic> [problems] [minutes] [confidence] [notes]` - Log a completed study session\n"
+        value="• `/study log <category> <topic> [problems] [minutes] [confidence] [notes]` - Log prep (DSA, LLD, HLD, Microservices, Core CS)\n"
               "• `/study quicklog` - Interactive popup modal for quick logging\n"
               "• `/study progress [user]` - View visual progress scorecard, hours, and breakdown\n"
               "• `/study streak` - View active daily study streak & milestones\n"
-              "• `/study roadmap [category]` - Browse structured curriculum for DSA, LLD, HLD, Core CS\n"
+              "• `/study roadmap [category]` - Browse structured curriculum for DSA, LLD, HLD, Microservices (K8s), Core CS\n"
               "• `/study goals` - Create & track personal preparation targets",
+        inline=False
+    )
+
+    embed.add_field(
+        name="📖 Learning Resources & Roadmaps",
+        value="• `/study resources [category] [topic]` - Browse curated and community learning resources\n"
+              "• `/study resource_add <category> <topic> <title> <url> [type]` - Submit a new prep resource/link\n"
+              "• `/study resource_modal` - Interactive form to share resources",
         inline=False
     )
 
@@ -317,7 +364,7 @@ def create_help_embed() -> discord.Embed:
     embed.add_field(
         name="🏆 Community & Leaderboard",
         value="• `/study leaderboard` - Server rankings by study hours & problems solved\n"
-              "• `/profile setup [name]` - Configure candidate profile with name (Discord ID auto-populated)",
+              "• `/study profile [name] [target_role]` - Configure candidate profile with name (Discord ID auto-populated)",
         inline=False
     )
 

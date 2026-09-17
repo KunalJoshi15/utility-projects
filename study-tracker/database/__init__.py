@@ -5,6 +5,7 @@ from .models import (
     StudyGoal,
     StudyStreak,
     PomodoroSession,
+    StudyResource,
     StudyCategory
 )
 from .db import get_db, init_db, engine
@@ -16,6 +17,7 @@ __all__ = [
     "StudyGoal",
     "StudyStreak",
     "PomodoroSession",
+    "StudyResource",
     "StudyCategory",
     "get_db",
     "init_db",

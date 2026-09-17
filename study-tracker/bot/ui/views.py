@@ -53,6 +53,7 @@ class RoadmapSelectView(discord.ui.View):
             discord.SelectOption(label="Data Structures & Algorithms", value="DSA", emoji="🧩", description="Arrays, Trees, Graphs, DP"),
             discord.SelectOption(label="Low-Level Design & Patterns", value="LLD", emoji="🏗️", description="SOLID, Design Patterns, Machine Coding"),
             discord.SelectOption(label="High-Level System Design", value="HLD", emoji="🌐", description="Distributed Systems, Caching, URL Shortener"),
+            discord.SelectOption(label="Microservices & Kubernetes", value="MICROSERVICES", emoji="☸️", description="K8s, Pods, Helm, Saga, CQRS, Observability"),
             discord.SelectOption(label="CS Fundamentals & Concurrency", value="CORE_CS", emoji="💻", description="Threads, OS, DBMS, Networks"),
         ]
     )

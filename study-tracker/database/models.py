@@ -20,6 +20,8 @@ class StudyCategory(enum.Enum):
     DSA = "DSA"
     LLD = "LLD"
     HLD = "HLD"
+    MICROSERVICES = "MICROSERVICES"
+    DEVOPS_CLOUD = "DEVOPS_CLOUD"
     CORE_CS = "CORE_CS"
     MOCK_INTERVIEW = "MOCK_INTERVIEW"
     CUSTOM = "CUSTOM"
@@ -49,9 +51,9 @@ class StudyLog(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     discord_id = Column(String(64), ForeignKey("user_study_profiles.discord_id"), nullable=False, index=True)
     
-    category = Column(String(50), nullable=False, default="DSA")  # DSA, LLD, HLD, CORE_CS, MOCK_INTERVIEW, CUSTOM
-    topic = Column(String(150), nullable=False)                   # e.g. "Dynamic Programming", "Observer Pattern"
-    subtopic_or_problem = Column(String(200), nullable=True)     # e.g. "Coin Change II", "Parking Lot LLD"
+    category = Column(String(50), nullable=False, default="DSA")  # DSA, LLD, HLD, MICROSERVICES, DEVOPS_CLOUD, CORE_CS, MOCK_INTERVIEW, CUSTOM
+    topic = Column(String(150), nullable=False)                   # e.g. "Kubernetes Deployments", "Dynamic Programming"
+    subtopic_or_problem = Column(String(200), nullable=True)     # e.g. "Ingress & HPA", "Coin Change II"
     
     duration_minutes = Column(Integer, default=30)
     problems_solved = Column(Integer, default=1)
@@ -102,3 +104,19 @@ class PomodoroSession(Base):
     status = Column(String(30), default="COMPLETED")              # COMPLETED, ABORTED
     started_at = Column(DateTime, default=get_utc_now)
     completed_at = Column(DateTime, default=get_utc_now)
+
+class StudyResource(Base):
+    __tablename__ = "study_resources"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    category = Column(String(50), nullable=False, index=True)    # DSA, LLD, HLD, MICROSERVICES, DEVOPS_CLOUD, CORE_CS, CUSTOM
+    topic = Column(String(150), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    url = Column(String(500), nullable=False)
+    resource_type = Column(String(50), default="ARTICLE")        # ARTICLE, VIDEO, DOCUMENTATION, PRACTICE, REPO, CHEATSHEET, BOOK
+    description = Column(Text, nullable=True)
+    added_by_discord_id = Column(String(64), nullable=True, default="OFFICIAL")
+    added_by_name = Column(String(100), nullable=True, default="Curated")
+    is_verified = Column(Boolean, default=True)
+    upvotes = Column(Integer, default=1)
+    created_at = Column(DateTime, default=get_utc_now)

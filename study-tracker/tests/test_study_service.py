@@ -181,3 +181,68 @@ async def test_leaderboard_calculation(test_db: AsyncSession):
     assert board[0]["total_hours"] == 2.0
     assert board[1]["name"] == "Bob"
     assert board[1]["total_hours"] == 1.0
+
+def test_microservices_and_kubernetes_roadmap():
+    ms_map = study_service.get_curated_roadmaps("MICROSERVICES")
+    assert "MICROSERVICES" in ms_map
+    topics = ms_map["MICROSERVICES"]["topics"]
+    assert len(topics) >= 8
+
+    # Verify key microservices and kubernetes domains
+    topic_names = " ".join([t["name"] for t in topics])
+    assert "Kubernetes" in topic_names
+    assert "Helm" in topic_names
+    assert "Docker" in topic_names
+    assert "Distributed Transaction" in topic_names or "Saga" in topic_names
+    assert "Observability" in topic_names or "OpenTelemetry" in topic_names
+
+    # Check key problems / subtopics
+    all_problems = [p for t in topics for p in t.get("key_problems", [])]
+    assert any("Pod Lifecycle" in p or "HPA" in p for p in all_problems)
+    assert any("Saga Pattern" in p or "Outbox" in p for p in all_problems)
+    assert any("OpenTelemetry" in p or "Jaeger" in p for p in all_problems)
+
+@pytest.mark.asyncio
+async def test_resources_add_get_and_upvote(test_db: AsyncSession):
+    # 1. Add user custom resource
+    res = await study_service.add_resource(
+        db=test_db,
+        category="MICROSERVICES",
+        topic="Kubernetes Ingress",
+        title="Understanding K8s Ingress Controllers & NGINX Routing",
+        url="https://kubernetes.io/docs/concepts/services-networking/ingress/",
+        resource_type="DOCUMENTATION",
+        description="Comprehensive guide to Layer 7 routing and SSL termination in Kubernetes.",
+        added_by_discord_id="user_k8s_pro",
+        added_by_name="K8s Dev"
+    )
+    assert res.id is not None
+    assert res.category == "MICROSERVICES"
+    assert res.upvotes == 1
+
+    # 2. Get resources filtering by category
+    results = await study_service.get_resources(test_db, category="MICROSERVICES")
+    assert len(results) >= 1
+    assert any(r["title"] == "Understanding K8s Ingress Controllers & NGINX Routing" for r in results)
+
+    # 3. Search by topic keyword
+    matched = await study_service.get_resources(test_db, topic="Ingress")
+    assert len(matched) >= 1
+    assert matched[0]["topic"] == "Kubernetes Ingress"
+
+    # 4. Upvote resource
+    updated = await study_service.upvote_resource(test_db, res.id)
+    assert updated.upvotes == 2
+
+@pytest.mark.asyncio
+async def test_seed_default_resources(test_db: AsyncSession):
+    await study_service.seed_default_resources(test_db)
+    all_res = await study_service.get_resources(test_db)
+    assert len(all_res) >= 5
+
+    # Check that Kubernetes, Microservices, and Kafka seeded items exist
+    titles = [r["title"] for r in all_res]
+    assert any("Kubernetes" in t for t in titles)
+    assert any("Microservices" in t or "Patterns" in t for t in titles)
+    assert any("Kafka" in t or "Distributed" in t for t in titles)
+

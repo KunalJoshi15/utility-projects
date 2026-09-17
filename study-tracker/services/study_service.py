@@ -61,6 +61,93 @@ CURATED_ROADMAPS = {
             {"name": "Classic System: Notification System", "key_problems": ["Multi-channel dispatch (APNS, FCM, Email, SMS)", "Rate limiting & user notification preferences", "Message deduplication & priority queues"]}
         ]
     },
+    "MICROSERVICES": {
+        "title": "⚡ Microservices Architecture & Kubernetes Ecosystem",
+        "description": "Cloud-native distributed services, container orchestration, Kubernetes, Service Mesh, and Event-Driven systems",
+        "topics": [
+            {
+                "name": "Kubernetes Core & Workloads",
+                "key_problems": [
+                    "Pods, ReplicaSets & Deployments",
+                    "StatefulSets & DaemonSets",
+                    "Jobs & CronJobs",
+                    "Resource Limits, Requests & QoS Classes"
+                ]
+            },
+            {
+                "name": "Kubernetes Networking & Ingress",
+                "key_problems": [
+                    "ClusterIP vs NodePort vs LoadBalancer",
+                    "Ingress Controllers (Nginx, Traefik, ALB)",
+                    "NetworkPolicies (Micro-segmentation)",
+                    "CoreDNS & Service Discovery inside K8s"
+                ]
+            },
+            {
+                "name": "Kubernetes Storage & Config",
+                "key_problems": [
+                    "ConfigMaps & Secrets management",
+                    "PersistentVolumes (PV) & PVCs",
+                    "StorageClasses & Dynamic Provisioning",
+                    "Secret rotation & HashiCorp Vault integration"
+                ]
+            },
+            {
+                "name": "Kubernetes Auto-Scaling & Health Probes",
+                "key_problems": [
+                    "Horizontal Pod Autoscaler (HPA) with custom metrics",
+                    "Vertical Pod Autoscaler (VPA) & Cluster Autoscaler",
+                    "Liveness, Readiness & Startup Probes",
+                    "Graceful Pod Termination & SIGTERM handling"
+                ]
+            },
+            {
+                "name": "Helm & Packaging for K8s",
+                "key_problems": [
+                    "Helm Chart structure & templates",
+                    "values.yaml overrides & environments",
+                    "Helm lifecycle hooks & rollback management",
+                    "Kustomize vs Helm comparison"
+                ]
+            },
+            {
+                "name": "Docker & Container Runtime",
+                "key_problems": [
+                    "Multi-stage Docker builds & minimal images",
+                    "Container security & non-root execution",
+                    "Docker Compose for local multi-service testing",
+                    "containerd & OCI runtime standards"
+                ]
+            },
+            {
+                "name": "Distributed Patterns (Saga, CQRS, Outbox)",
+                "key_problems": [
+                    "Saga Pattern (Choreography vs Orchestration)",
+                    "Transactional Outbox Pattern with Debezium CDC",
+                    "CQRS (Command Query Responsibility Segregation)",
+                    "Idempotency Keys & Deduplication in Microservices"
+                ]
+            },
+            {
+                "name": "Communication & API Gateways",
+                "key_problems": [
+                    "gRPC & Protocol Buffers vs REST vs GraphQL",
+                    "API Gateway & BFF (Backend for Frontend) pattern",
+                    "Service Mesh (Istio / Envoy sidecars & mTLS)",
+                    "Circuit Breakers & Rate Limiting (Resilience4j)"
+                ]
+            },
+            {
+                "name": "Observability & Distributed Tracing",
+                "key_problems": [
+                    "OpenTelemetry (Traces, Metrics, Logs)",
+                    "Distributed Tracing with Jaeger / Zipkin (TraceId, SpanId)",
+                    "Prometheus & Grafana for SLIs/SLOs monitoring",
+                    "Centralized Logging (ELK & Grafana Loki)"
+                ]
+            }
+        ]
+    },
     "CORE_CS": {
         "title": "💻 Computer Science Fundamentals & Concurrency",
         "description": "Operating systems, DBMS internals, networking, and multi-threading",
@@ -72,6 +159,85 @@ CURATED_ROADMAPS = {
         ]
     }
 }
+
+CURATED_RESOURCES = [
+    # Kubernetes & Microservices
+    {
+        "category": "MICROSERVICES",
+        "topic": "Kubernetes Architecture & Core Concepts",
+        "title": "Kubernetes Official Interactive Tutorials & Basics",
+        "url": "https://kubernetes.io/docs/tutorials/kubernetes-basics/",
+        "resource_type": "DOCUMENTATION",
+        "description": "Interactive browser-based tutorial covering Pods, Deployments, Services, and scaling."
+    },
+    {
+        "category": "MICROSERVICES",
+        "topic": "Microservices Patterns",
+        "title": "Microservices.io Pattern Language by Chris Richardson",
+        "url": "https://microservices.io/patterns/index.html",
+        "resource_type": "ARTICLE",
+        "description": "Industry standard pattern catalog covering Saga, CQRS, API Gateway, Service Mesh, and Circuit Breaker."
+    },
+    {
+        "category": "MICROSERVICES",
+        "topic": "Kubernetes Networking & Ingress",
+        "title": "Kubernetes Ingress & Service Networking Deep Dive",
+        "url": "https://kubernetes.io/docs/concepts/services-networking/",
+        "resource_type": "DOCUMENTATION",
+        "description": "Comprehensive explanation of ClusterIP, NodePort, LoadBalancer, and Ingress routing."
+    },
+    {
+        "category": "MICROSERVICES",
+        "topic": "Distributed Tracing & Observability",
+        "title": "OpenTelemetry Official Documentation & CNCF Standards",
+        "url": "https://opentelemetry.io/docs/",
+        "resource_type": "DOCUMENTATION",
+        "description": "Unified standard for traces, metrics, and logs in cloud-native microservices."
+    },
+    {
+        "category": "MICROSERVICES",
+        "topic": "Event-Driven Microservices with Kafka",
+        "title": "Confluent Kafka Microservices Architecture Guide",
+        "url": "https://developer.confluent.io/learn/kafka-microservices/",
+        "resource_type": "ARTICLE",
+        "description": "Event sourcing, CQRS, and message streaming with Apache Kafka."
+    },
+    # DSA
+    {
+        "category": "DSA",
+        "topic": "DSA Patterns & LeetCode Roadmaps",
+        "title": "NeetCode 150 & Blind 75 Interactive Practice Roadmap",
+        "url": "https://neetcode.io/roadmap",
+        "resource_type": "PRACTICE",
+        "description": "Structured curriculum covering all top coding interview patterns with video solutions."
+    },
+    {
+        "category": "DSA",
+        "topic": "Algorithms & Problem Solving",
+        "title": "Striver's A2Z DSA Sheet",
+        "url": "https://takeuforward.org/strivers-a2z-dsa-course/strivers-a2z-dsa-course-sheet-2/",
+        "resource_type": "PRACTICE",
+        "description": "Comprehensive end-to-end DSA preparation sheet."
+    },
+    # LLD
+    {
+        "category": "LLD",
+        "topic": "Design Patterns & SOLID",
+        "title": "Refactoring.Guru Design Patterns & SOLID Guide",
+        "url": "https://refactoring.guru/design-patterns",
+        "resource_type": "CHEATSHEET",
+        "description": "Visual, code-rich guide to Creational, Structural, and Behavioral design patterns."
+    },
+    # HLD
+    {
+        "category": "HLD",
+        "topic": "System Design Fundamentals",
+        "title": "The System Design Primer by Donne Martin",
+        "url": "https://github.com/donnemartin/system-design-primer",
+        "resource_type": "REPO",
+        "description": "The open-source Bible for large-scale distributed system design interviews."
+    }
+]
 
 class StudyService:
     async def get_or_create_profile(self, db: AsyncSession, discord_id: str, username: Optional[str] = None, display_name: Optional[str] = None) -> UserStudyProfile:
@@ -138,7 +304,7 @@ class StudyService:
         """Log a study session, auto-update streaks and increment matching goal counters."""
         await self.get_or_create_profile(db, discord_id, username)
 
-        cat_normalized = category.upper() if category.upper() in ["DSA", "LLD", "HLD", "CORE_CS", "MOCK_INTERVIEW", "CUSTOM"] else "DSA"
+        cat_normalized = category.upper() if category.upper() in ["DSA", "LLD", "HLD", "MICROSERVICES", "CORE_CS", "MOCK_INTERVIEW", "CUSTOM"] else "DSA"
         conf = max(1, min(5, confidence_score))
         dur = max(1, duration_minutes)
         probs = max(0, problems_solved)
@@ -399,8 +565,112 @@ class StudyService:
         board.sort(key=lambda x: (x["total_hours"], x["total_problems"]), reverse=True)
         return board[:limit]
 
+    async def add_resource(
+        self,
+        db: AsyncSession,
+        category: str,
+        topic: str,
+        title: str,
+        url: str,
+        resource_type: str = "ARTICLE",
+        description: Optional[str] = None,
+        added_by_discord_id: Optional[str] = None,
+        added_by_name: Optional[str] = None
+    ) -> StudyResource:
+        """Add a learning resource or tutorial link."""
+        from database.models import StudyResource
+        res = StudyResource(
+            category=category.upper(),
+            topic=topic.strip(),
+            title=title.strip(),
+            url=url.strip(),
+            resource_type=resource_type.upper(),
+            description=description.strip() if description else None,
+            added_by_discord_id=added_by_discord_id or "COMMUNITY",
+            added_by_name=added_by_name or "Community Member",
+            is_verified=True,
+            upvotes=1,
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(res)
+        await db.commit()
+        await db.refresh(res)
+        return res
+
+    async def get_resources(
+        self,
+        db: AsyncSession,
+        category: Optional[str] = None,
+        topic: Optional[str] = None,
+        limit: int = 15
+    ) -> List[Dict[str, Any]]:
+        """Fetch curated and user-submitted resources."""
+        from database.models import StudyResource
+        # Ensure default curated resources are seeded in DB
+        await self.seed_default_resources(db)
+
+        stmt = select(StudyResource)
+        if category:
+            stmt = stmt.where(StudyResource.category == category.upper())
+        if topic:
+            stmt = stmt.where(StudyResource.topic.ilike(f"%{topic}%"))
+        stmt = stmt.order_by(StudyResource.upvotes.desc(), StudyResource.created_at.desc()).limit(limit)
+
+        result = await db.execute(stmt)
+        db_resources = list(result.scalars().all())
+
+        return [
+            {
+                "id": r.id,
+                "category": r.category,
+                "topic": r.topic,
+                "title": r.title,
+                "url": r.url,
+                "type": r.resource_type,
+                "description": r.description or "Verified prep resource",
+                "added_by": r.added_by_name or "Curated",
+                "upvotes": r.upvotes
+            }
+            for r in db_resources
+        ]
+
+    async def upvote_resource(self, db: AsyncSession, resource_id: int):
+        """Upvote a resource and return updated resource."""
+        from database.models import StudyResource
+        result = await db.execute(select(StudyResource).where(StudyResource.id == resource_id))
+        res = result.scalars().first()
+        if res:
+            res.upvotes += 1
+            await db.commit()
+            await db.refresh(res)
+            return res
+        return None
+
+    async def seed_default_resources(self, db: AsyncSession):
+        """Seed initial curated resources if database table is empty."""
+        from database.models import StudyResource
+        count_res = await db.execute(select(func.count(StudyResource.id)))
+        count = count_res.scalar() or 0
+        if count == 0:
+            for item in CURATED_RESOURCES:
+                db_item = StudyResource(
+                    category=item["category"],
+                    topic=item["topic"],
+                    title=item["title"],
+                    url=item["url"],
+                    resource_type=item["resource_type"],
+                    description=item["description"],
+                    added_by_discord_id="OFFICIAL",
+                    added_by_name="Official Curriculum",
+                    is_verified=True,
+                    upvotes=5,
+                    created_at=datetime.now(timezone.utc)
+                )
+                db.add(db_item)
+            await db.commit()
+
     def get_curated_roadmaps(self, category: Optional[str] = None) -> Dict[str, Any]:
-        """Retrieve curated roadmaps for DSA, LLD, HLD, and Core CS."""
+        """Retrieve curated roadmaps for DSA, LLD, HLD, Microservices, and Core CS."""
         if category and category.upper() in CURATED_ROADMAPS:
             return {category.upper(): CURATED_ROADMAPS[category.upper()]}
         return CURATED_ROADMAPS

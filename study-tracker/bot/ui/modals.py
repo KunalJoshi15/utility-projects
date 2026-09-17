@@ -58,7 +58,9 @@ class QuickStudyLogModal(discord.ui.Modal, title="Log Study Session"):
 
         # Infer category from topic keywords
         top_lower = f"{self.topic.value} {self.problem_title.value}".lower()
-        if any(w in top_lower for w in ["dp", "tree", "graph", "binary", "array", "leetcode", "stack", "heap", "trie"]):
+        if any(w in top_lower for w in ["k8s", "kubernetes", "pod", "helm", "docker", "microservice", "saga", "cqrs", "istio", "envoy", "grpc"]):
+            category = "MICROSERVICES"
+        elif any(w in top_lower for w in ["dp", "tree", "graph", "binary", "array", "leetcode", "stack", "heap", "trie"]):
             category = "DSA"
         elif any(w in top_lower for w in ["pattern", "lld", "solid", "parking", "tictactoe", "elevator", "factory", "singleton", "observer"]):
             category = "LLD"
@@ -90,6 +92,61 @@ class QuickStudyLogModal(discord.ui.Modal, title="Log Study Session"):
             ephemeral=True
         )
 
+class AddResourceModal(discord.ui.Modal, title="Add Preparation Resource"):
+    title_input = discord.ui.TextInput(
+        label="Resource Title (Mandatory)",
+        placeholder="e.g. Kubernetes Official Documentation or Saga Pattern",
+        required=True,
+        max_length=150
+    )
+    url_input = discord.ui.TextInput(
+        label="URL / Link (Mandatory)",
+        placeholder="https://kubernetes.io/docs/concepts/workloads/pods/",
+        required=True,
+        max_length=400
+    )
+    category_input = discord.ui.TextInput(
+        label="Category (MICROSERVICES, DSA, LLD, HLD, CORE_CS)",
+        placeholder="MICROSERVICES",
+        default="MICROSERVICES",
+        required=True,
+        max_length=30
+    )
+    topic_input = discord.ui.TextInput(
+        label="Specific Topic / Tool",
+        placeholder="e.g. Kubernetes Pods, Kafka, Redis, or Graph BFS",
+        required=True,
+        max_length=100
+    )
+    description_input = discord.ui.TextInput(
+        label="Short Description / Key Takeaways",
+        placeholder="Why this resource is great, key interview takeaways, or tips...",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=1000
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        async with get_db() as db:
+            res = await study_service.add_resource(
+                db=db,
+                category=self.category_input.value.strip().upper(),
+                topic=self.topic_input.value.strip(),
+                title=self.title_input.value.strip(),
+                url=self.url_input.value.strip(),
+                description=self.description_input.value.strip() if self.description_input.value else None,
+                added_by_discord_id=str(interaction.user.id),
+                added_by_name=interaction.user.name,
+                resource_type="ARTICLE"
+            )
+        await interaction.followup.send(
+            f"🎉 **Resource Added Successfully!**\n"
+            f"📌 **[{res.title}]({res.url})** in `{res.category}` > `{res.topic}`\n"
+            f"It is now available in `/study resources` for the community to discover and upvote!",
+            ephemeral=True
+        )
+
 class CreateGoalModal(discord.ui.Modal, title="Create Preparation Goal"):
     goal_title = discord.ui.TextInput(
         label="Goal Description",
@@ -104,7 +161,7 @@ class CreateGoalModal(discord.ui.Modal, title="Create Preparation Goal"):
         max_length=4
     )
     category = discord.ui.TextInput(
-        label="Category (DSA, LLD, HLD, CORE_CS, ALL)",
+        label="Category (DSA, LLD, HLD, CORE_CS, MICROSERVICES, ALL)",
         placeholder="e.g. DSA",
         default="DSA",
         required=True,
