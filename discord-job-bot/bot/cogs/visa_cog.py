@@ -11,7 +11,7 @@ from bot.ui.embeds import (
 )
 
 class VisaCog(commands.GroupCog, group_name="visa"):
-    """Commands for tracking international visa sponsorship, relocation programs, and verified sponsor registers."""
+    """Commands for visa sponsorship and relocation programs."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot

@@ -8,7 +8,7 @@ from services.profile_service import profile_service
 from bot.ui.embeds import create_salary_card_embed, create_salary_comparison_embed
 
 class SalaryCog(commands.GroupCog, group_name="salary"):
-    """Commands for salary intelligence, AmbitionBox & Glassdoor benchmarks, and company paygrade comparisons."""
+    """Commands for salary intelligence and market benchmarks."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
