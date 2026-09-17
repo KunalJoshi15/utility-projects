@@ -29,8 +29,8 @@ def create_job_embed(job: CachedJob, current_idx: int = 1, total_count: int = 1)
     if job.salary_range and job.salary_range.lower() not in ("competitive", "not disclosed", "none", "competitive salary"):
         embed.add_field(name="💰 Disclosed Salary", value=f"`{job.salary_range}`", inline=True)
 
-    if job.company and "Live" not in job.company and "Portal" not in job.company:
-        embed.add_field(name="🏢 Company", value=f"`{job.company}`", inline=True)
+    if job.company:
+        embed.add_field(name="🏢 Company", value=f"**`{job.company}`**", inline=True)
 
     if job.visa_sponsorship:
         embed.add_field(name="🛂 Visa / Relocation", value=f"`{job.visa_sponsorship}`", inline=True)
@@ -61,7 +61,7 @@ def create_job_embed(job: CachedJob, current_idx: int = 1, total_count: int = 1)
 
     embed.add_field(
         name="🔗 Where to Apply",
-        value=f"**[👉 Click Here to Open & Apply on {provider_name}]({job.apply_url})**",
+        value=f"**[👉 Open & Apply on {provider_name}]({job.apply_url})**",
         inline=False
     )
     
@@ -85,8 +85,8 @@ def create_job_detail_embed(job: CachedJob) -> discord.Embed:
     if job.salary_range and job.salary_range.lower() not in ("competitive", "not disclosed", "none"):
         embed.add_field(name="💰 Disclosed Salary", value=f"`{job.salary_range}`", inline=True)
         
-    if job.company and "Live" not in job.company and "Portal" not in job.company:
-        embed.add_field(name="🏢 Company", value=f"`{job.company}`", inline=True)
+    if job.company:
+        embed.add_field(name="🏢 Company", value=f"**`{job.company}`**", inline=True)
 
     if job.visa_sponsorship:
         embed.add_field(name="🛂 Visa / Relocation", value=f"`{job.visa_sponsorship}`", inline=True)

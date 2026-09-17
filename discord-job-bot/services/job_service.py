@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config.settings import settings
 from database.models import CachedJob, UserProfile, ApplyType
 from services.gemini_service import gemini_service
+from services.company_directory import get_company_career_url, find_company_match
 
 logger = logging.getLogger(__name__)
 
@@ -124,20 +125,43 @@ class JobService:
 
         all_jobs: List[CachedJob] = []
         for comp in target_list:
-            comp_jobs = await self.search_jobs(
-                db=db,
-                query=role,
-                country=country,
-                location=location,
-                company_filter=comp,
-                visa_sponsorship=user.requires_sponsorship,
-                limit=2,
-                skills_filter=skills
-            )
-            all_jobs.extend(comp_jobs)
+            career_info = get_company_career_url(comp, role, location)
+            job_id = f"cp-{abs(hash(comp.lower() + role.lower())) % 10000000:07d}"
+            
+            existing = await db.execute(select(CachedJob).where(CachedJob.job_id == job_id))
+            cached = existing.scalars().first()
+            if not cached:
+                cached = CachedJob(
+                    job_id=job_id,
+                    provider=career_info["portal_name"],
+                    title=f"{role} @ {career_info['name']}",
+                    company=career_info["name"],
+                    location=f"{location}, {country}",
+                    country=country,
+                    is_remote=False,
+                    employment_type="FULLTIME",
+                    salary_range="Competitive",
+                    visa_sponsorship="🛂 Direct Corporate Hiring" if user.requires_sponsorship else None,
+                    apply_type=career_info.get("ats_type", ApplyType.DIRECT_CAREER.value),
+                    apply_url=career_info["apply_url"],
+                    description=career_info.get("description", f"Explore open {role} vacancies directly on the official {career_info['name']} career portal."),
+                    company_logo_url=career_info.get("logo_url"),
+                    posted_date="Official Career Portal",
+                    cached_at=datetime.now(timezone.utc)
+                )
+                db.add(cached)
+            else:
+                cached.apply_url = career_info["apply_url"]
+                cached.title = f"{role} @ {career_info['name']}"
+                cached.company = career_info["name"]
+                cached.provider = career_info["portal_name"]
+                cached.company_logo_url = career_info.get("logo_url")
+                
+            all_jobs.append(cached)
             if len(all_jobs) >= limit:
                 break
 
+        await db.flush()
         return all_jobs[:limit]
 
     async def search_jobs_by_prompt(
@@ -397,12 +421,29 @@ class JobService:
                 "posted_date": "Active Listing"
             })
 
-        live_jobs.extend([
-            {
+        if comp:
+            career_info = get_company_career_url(comp, q_clean, loc_search)
+            live_jobs.append({
+                "job_id": f"cp-{uuid.uuid4().hex[:7]}",
+                "provider": career_info["portal_name"],
+                "title": f"{q_clean.title()} @ {career_info['name']}",
+                "company": career_info["name"],
+                "location": loc_display,
+                "is_remote": is_remote,
+                "employment_type": emp_label,
+                "salary_range": salary_display,
+                "visa_sponsorship": visa_badge,
+                "apply_type": career_info.get("ats_type", ApplyType.DIRECT_CAREER.value),
+                "apply_url": career_info["apply_url"],
+                "description": career_info.get("description", f"Explore open {q_clean.title()} positions directly on the official {career_info['name']} career portal."),
+                "company_logo_url": career_info.get("logo_url"),
+                "posted_date": "Official Career Portal"
+            })
+            live_jobs.append({
                 "job_id": f"li-{uuid.uuid4().hex[:7]}",
-                "provider": "LinkedIn (Easy Apply)",
-                "title": f"{comp or q_clean.title()} — {q_clean.title()}",
-                "company": comp or "LinkedIn Live",
+                "provider": "LinkedIn (Company Openings)",
+                "title": f"{q_clean.title()} @ {career_info['name']} (LinkedIn)",
+                "company": career_info["name"],
                 "location": loc_display,
                 "is_remote": is_remote,
                 "employment_type": emp_label,
@@ -410,31 +451,15 @@ class JobService:
                 "visa_sponsorship": visa_badge,
                 "apply_type": ApplyType.LINKEDIN_EASY_APPLY.value,
                 "apply_url": linkedin_easy_apply_url,
-                "description": f"Direct 1-click application on LinkedIn with Easy Apply filter enabled for {q_clean.title()} in {loc_display}.",
-                "company_logo_url": "https://static.licdn.com/scds/common/u/images/logos/favicons/v1/favicon.ico",
+                "description": f"Verified {career_info['name']} openings on LinkedIn with 1-click Easy Apply filter enabled.",
+                "company_logo_url": career_info.get("logo_url") or "https://static.licdn.com/scds/common/u/images/logos/favicons/v1/favicon.ico",
                 "posted_date": "Active Live Listing"
-            },
-            {
-                "job_id": f"nk-{uuid.uuid4().hex[:7]}",
-                "provider": "Naukri",
-                "title": f"{comp or q_clean.title()} — {q_clean.title()}",
-                "company": comp or "Naukri Live",
-                "location": loc_display,
-                "is_remote": is_remote,
-                "employment_type": emp_label,
-                "salary_range": salary_display,
-                "visa_sponsorship": visa_badge,
-                "apply_type": ApplyType.DIRECT_CAREER.value,
-                "apply_url": naukri_search_url,
-                "description": f"Verified live openings on Naukri matching {q_clean.title()} in {loc_display}.",
-                "company_logo_url": "https://img.naukimg.com/logo_images/groups/v1/458.gif",
-                "posted_date": "Updated Today"
-            },
-            {
+            })
+            live_jobs.append({
                 "job_id": f"gj-{uuid.uuid4().hex[:7]}",
                 "provider": "Google Jobs",
-                "title": f"{comp or q_clean.title()} — {q_clean.title()}",
-                "company": comp or "Google Jobs Portal",
+                "title": f"{q_clean.title()} @ {career_info['name']} (Google Jobs)",
+                "company": career_info["name"],
                 "location": loc_display,
                 "is_remote": is_remote,
                 "employment_type": emp_label,
@@ -442,27 +467,93 @@ class JobService:
                 "visa_sponsorship": visa_badge,
                 "apply_type": ApplyType.EXTERNAL_URL.value,
                 "apply_url": google_jobs_url,
-                "description": f"Aggregated corporate listings on Google Jobs for {q_clean.title()} in {loc_display}.",
-                "company_logo_url": "https://www.google.com/favicon.ico",
+                "description": f"Aggregated corporate listings for {career_info['name']} across web career portals on Google Jobs.",
+                "company_logo_url": career_info.get("logo_url") or "https://www.google.com/favicon.ico",
                 "posted_date": "Live Today"
-            },
-            {
-                "job_id": f"in-{uuid.uuid4().hex[:7]}",
-                "provider": "Indeed",
-                "title": f"{comp or q_clean.title()} — {q_clean.title()}",
-                "company": comp or "Indeed Live",
+            })
+            live_jobs.append({
+                "job_id": f"nk-{uuid.uuid4().hex[:7]}",
+                "provider": "Naukri",
+                "title": f"{q_clean.title()} @ {career_info['name']} (Naukri)",
+                "company": career_info["name"],
                 "location": loc_display,
                 "is_remote": is_remote,
                 "employment_type": emp_label,
                 "salary_range": salary_display,
                 "visa_sponsorship": visa_badge,
-                "apply_type": ApplyType.EXTERNAL_URL.value,
-                "apply_url": indeed_url,
-                "description": f"Live postings on Indeed for {q_clean.title()} in {loc_display}.",
-                "company_logo_url": "https://www.indeed.com/favicon.ico",
-                "posted_date": "Active Recently"
-            }
-        ])
+                "apply_type": ApplyType.DIRECT_CAREER.value,
+                "apply_url": naukri_search_url,
+                "description": f"Direct openings for {career_info['name']} on Naukri India job portal.",
+                "company_logo_url": career_info.get("logo_url") or "https://img.naukimg.com/logo_images/groups/v1/458.gif",
+                "posted_date": "Updated Today"
+            })
+        else:
+            live_jobs.extend([
+                {
+                    "job_id": f"li-{uuid.uuid4().hex[:7]}",
+                    "provider": "LinkedIn (Easy Apply)",
+                    "title": f"{q_clean.title()} — Live Easy Apply Openings",
+                    "company": "LinkedIn Verified Openings",
+                    "location": loc_display,
+                    "is_remote": is_remote,
+                    "employment_type": emp_label,
+                    "salary_range": salary_display,
+                    "visa_sponsorship": visa_badge,
+                    "apply_type": ApplyType.LINKEDIN_EASY_APPLY.value,
+                    "apply_url": linkedin_easy_apply_url,
+                    "description": f"Direct 1-click application on LinkedIn with Easy Apply filter enabled for {q_clean.title()} in {loc_display}.",
+                    "company_logo_url": "https://static.licdn.com/scds/common/u/images/logos/favicons/v1/favicon.ico",
+                    "posted_date": "Active Live Listing"
+                },
+                {
+                    "job_id": f"nk-{uuid.uuid4().hex[:7]}",
+                    "provider": "Naukri",
+                    "title": f"{q_clean.title()} — Verified India Openings",
+                    "company": "Naukri India Openings",
+                    "location": loc_display,
+                    "is_remote": is_remote,
+                    "employment_type": emp_label,
+                    "salary_range": salary_display,
+                    "visa_sponsorship": visa_badge,
+                    "apply_type": ApplyType.DIRECT_CAREER.value,
+                    "apply_url": naukri_search_url,
+                    "description": f"Verified live openings on Naukri matching {q_clean.title()} in {loc_display}.",
+                    "company_logo_url": "https://img.naukimg.com/logo_images/groups/v1/458.gif",
+                    "posted_date": "Updated Today"
+                },
+                {
+                    "job_id": f"gj-{uuid.uuid4().hex[:7]}",
+                    "provider": "Google Jobs",
+                    "title": f"{q_clean.title()} — Aggregated Multi-Portal Feed",
+                    "company": "Google Jobs Index",
+                    "location": loc_display,
+                    "is_remote": is_remote,
+                    "employment_type": emp_label,
+                    "salary_range": salary_display,
+                    "visa_sponsorship": visa_badge,
+                    "apply_type": ApplyType.EXTERNAL_URL.value,
+                    "apply_url": google_jobs_url,
+                    "description": f"Aggregated corporate listings on Google Jobs for {q_clean.title()} in {loc_display}.",
+                    "company_logo_url": "https://www.google.com/favicon.ico",
+                    "posted_date": "Live Today"
+                },
+                {
+                    "job_id": f"in-{uuid.uuid4().hex[:7]}",
+                    "provider": "Indeed",
+                    "title": f"{q_clean.title()} — Direct Employer Postings",
+                    "company": "Indeed Live Postings",
+                    "location": loc_display,
+                    "is_remote": is_remote,
+                    "employment_type": emp_label,
+                    "salary_range": salary_display,
+                    "visa_sponsorship": visa_badge,
+                    "apply_type": ApplyType.EXTERNAL_URL.value,
+                    "apply_url": indeed_url,
+                    "description": f"Live postings on Indeed for {q_clean.title()} in {loc_display}.",
+                    "company_logo_url": "https://www.indeed.com/favicon.ico",
+                    "posted_date": "Active Recently"
+                }
+            ])
         return live_jobs
 
     async def _search_jsearch(

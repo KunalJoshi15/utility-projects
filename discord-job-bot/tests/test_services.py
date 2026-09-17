@@ -409,7 +409,50 @@ async def test_job_service_search_by_prompt(test_db: AsyncSession):
     for job in jobs:
         assert job.job_id is not None
         assert "India" in job.country or "Bengaluru" in job.location
-        assert any(domain in job.apply_url for domain in ["linkedin.com", "naukri.com", "google.com", "indeed.com"])
+        assert any(domain in job.apply_url for domain in ["linkedin.com", "naukri.com", "google.com", "indeed.com", "careers."])
+
+
+@pytest.mark.asyncio
+async def test_company_directory_and_target_companies_portals(test_db: AsyncSession):
+    from services.company_directory import get_company_career_url, find_company_match
+    
+    # 1. Test Static Directory Lookups
+    google_info = get_company_career_url("Google", "Backend Engineer", "Bengaluru")
+    assert google_info["name"] == "Google"
+    assert "careers.google.com" in google_info["home_url"] or "careers.google.com" in google_info["apply_url"] or "about/careers" in google_info["apply_url"]
+    
+    amazon_info = get_company_career_url("Amazon", "Software Engineer", "India")
+    assert amazon_info["name"] == "Amazon"
+    assert "amazon.jobs" in amazon_info["apply_url"]
+    
+    swiggy_info = get_company_career_url("Swiggy", "SDE 2", "Bengaluru")
+    assert swiggy_info["name"] == "Swiggy"
+    assert "careers.swiggy.com" in swiggy_info["apply_url"]
+    
+    # 2. Test search_jobs_for_target_companies
+    job_svc = JobService()
+    profile_svc = ProfileService()
+    user = await profile_svc.get_or_create_profile(test_db, "user_comp_test", "comp_tester")
+    user.target_companies = "Google, Amazon, Swiggy, Microsoft, Flipkart"
+    
+    jobs = await job_svc.search_jobs_for_target_companies(
+        db=test_db,
+        user=user,
+        companies=["Google", "Amazon", "Swiggy", "Microsoft", "Flipkart"],
+        limit=5
+    )
+    
+    assert len(jobs) == 5
+    assert jobs[0].company == "Google"
+    assert "Google Careers" in jobs[0].provider
+    assert "careers" in jobs[0].apply_url.lower() or "google" in jobs[0].apply_url.lower()
+    
+    assert jobs[1].company == "Amazon"
+    assert "Amazon" in jobs[1].provider
+    assert "amazon.jobs" in jobs[1].apply_url
+    
+    assert jobs[2].company == "Swiggy"
+    assert "careers.swiggy.com" in jobs[2].apply_url
 
 
 

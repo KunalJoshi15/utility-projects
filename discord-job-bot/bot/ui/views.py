@@ -21,9 +21,11 @@ class JobPaginationView(discord.ui.View):
         if self.link_button:
             self.remove_item(self.link_button)
 
-        # Add link button for current job
+        # Add dynamic link button for current job destination
+        prov = current_job.provider.replace("_", " ").title()
+        btn_label = f"🔗 Open {prov}" if len(prov) < 35 else "🔗 Open Career Portal"
         self.link_button = discord.ui.Button(
-            label="🔗 Open Listing",
+            label=btn_label,
             style=discord.ButtonStyle.link,
             url=current_job.apply_url
         )
