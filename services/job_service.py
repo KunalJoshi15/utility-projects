@@ -262,63 +262,63 @@ class JobService:
         live_jobs = [
             {
                 "job_id": f"li-{uuid.uuid4().hex[:7]}",
-                "provider": "linkedin",
-                "title": f"⚡ {comp or 'Verified Employer'} — {q_clean.title()} [LinkedIn Easy Apply]",
-                "company": comp or f"Top {country} Employer",
+                "provider": "LinkedIn (Easy Apply)",
+                "title": f"{comp or q_clean.title()} — {q_clean.title()}",
+                "company": comp or "LinkedIn Live",
                 "location": loc_display,
                 "is_remote": is_remote,
                 "employment_type": emp_label,
                 "salary_range": salary_display,
                 "apply_type": ApplyType.LINKEDIN_EASY_APPLY.value,
                 "apply_url": linkedin_easy_apply_url,
-                "description": f"Live LinkedIn Easy Apply openings for '{q_clean}' in {loc_display}. Click 'Apply Now' to submit or 'Open Listing' to view real-time applications directly on LinkedIn.",
+                "description": f"Direct 1-click application on LinkedIn with Easy Apply filter enabled for {q_clean.title()} in {loc_display}.",
                 "company_logo_url": "https://static.licdn.com/scds/common/u/images/logos/favicons/v1/favicon.ico",
-                "posted_date": "Active on LinkedIn (Live)"
+                "posted_date": "Active Live Listing"
             },
             {
                 "job_id": f"nk-{uuid.uuid4().hex[:7]}",
-                "provider": "naukri",
-                "title": f"🇮🇳 {comp or 'Tech Enterprise'} — {q_clean.title()} [Naukri Live]",
-                "company": comp or f"Top {country} Recruiter",
+                "provider": "Naukri",
+                "title": f"{comp or q_clean.title()} — {q_clean.title()}",
+                "company": comp or "Naukri Live",
                 "location": loc_display,
                 "is_remote": is_remote,
                 "employment_type": emp_label,
                 "salary_range": salary_display,
                 "apply_type": ApplyType.DIRECT_CAREER.value,
                 "apply_url": naukri_search_url,
-                "description": f"Active Naukri job feed for '{q_clean}' in {loc_display}. Recruiters and engineering hiring teams actively screening candidates.",
+                "description": f"Verified live openings on Naukri matching {q_clean.title()} in {loc_display}.",
                 "company_logo_url": "https://img.naukimg.com/logo_images/groups/v1/458.gif",
-                "posted_date": "Updated Today on Naukri"
+                "posted_date": "Updated Today"
             },
             {
                 "job_id": f"gj-{uuid.uuid4().hex[:7]}",
-                "provider": "google_jobs",
-                "title": f"🌐 {comp or 'Corporate Careers'} — {q_clean.title()} [Google Jobs {country}]",
-                "company": comp or "Direct Corporate Portals",
+                "provider": "Google Jobs",
+                "title": f"{comp or q_clean.title()} — {q_clean.title()}",
+                "company": comp or "Google Jobs Portal",
                 "location": loc_display,
                 "is_remote": is_remote,
                 "employment_type": emp_label,
                 "salary_range": salary_display,
                 "apply_type": ApplyType.EXTERNAL_URL.value,
                 "apply_url": google_jobs_url,
-                "description": f"Aggregated live listings for '{q_clean}' in {loc_display} across official corporate careers portals, Greenhouse, Lever, and Workday.",
+                "description": f"Aggregated corporate listings on Google Jobs for {q_clean.title()} in {loc_display}.",
                 "company_logo_url": "https://www.google.com/favicon.ico",
-                "posted_date": "Live on Google Jobs"
+                "posted_date": "Live Today"
             },
             {
                 "job_id": f"in-{uuid.uuid4().hex[:7]}",
-                "provider": "indeed",
-                "title": f"💼 {comp or 'Hiring Team'} — {q_clean.title()} [Indeed {country}]",
-                "company": comp or "Verified Employer",
+                "provider": "Indeed",
+                "title": f"{comp or q_clean.title()} — {q_clean.title()}",
+                "company": comp or "Indeed Live",
                 "location": loc_display,
                 "is_remote": is_remote,
                 "employment_type": emp_label,
                 "salary_range": salary_display,
                 "apply_type": ApplyType.EXTERNAL_URL.value,
                 "apply_url": indeed_url,
-                "description": f"Active Indeed postings for '{q_clean}' in {loc_display}. View salary benchmarks, employer ratings, and direct application links.",
+                "description": f"Live postings on Indeed for {q_clean.title()} in {loc_display}.",
                 "company_logo_url": "https://www.indeed.com/favicon.ico",
-                "posted_date": "Active 1d ago"
+                "posted_date": "Active Recently"
             }
         ]
         return live_jobs

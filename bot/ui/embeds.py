@@ -11,57 +11,55 @@ COLOR_INFO = 0xEB459E        # Fuchsia
 COLOR_GEMINI = 0x1A73E8      # Google AI Blue
 
 def create_job_embed(job: CachedJob, current_idx: int = 1, total_count: int = 1) -> discord.Embed:
-    """Format single job card embed for list pagination."""
-    badge_icon = "💼"
-    if job.apply_type == ApplyType.LINKEDIN_EASY_APPLY.value:
-        badge_icon = "⚡ [LinkedIn Easy Apply]"
-    elif "naukri" in job.provider.lower():
-        badge_icon = "🇮🇳 [Naukri Match]"
-    elif "google" in job.provider.lower():
-        badge_icon = "🌐 [Google Jobs Direct]"
-    elif job.apply_type == ApplyType.ATS_PORTAL.value:
-        badge_icon = "📝 [ATS Direct Portal]"
-    else:
-        badge_icon = "🔗 [Direct Live Listing]"
-
+    """Format clean, accurate single job card embed focused on profile, location, paygrade, and direct apply link."""
+    provider_name = job.provider.replace("_", " ").title()
+    
     embed = discord.Embed(
-        title=f"{job.title}",
+        title=f"💼 {job.title}",
         url=job.apply_url,
-        description=f"**Company:** `{job.company}`\n"
-                    f"**Location:** 📍 `{job.location}` {'(Remote 🏠)' if job.is_remote else ''}\n"
-                    f"**Salary:** 💰 `{job.salary_range}`\n"
-                    f"**Type:** 🕒 `{job.employment_type}`\n"
-                    f"**Platform:** {badge_icon}\n\n"
-                    f"**Summary:**\n{job.description[:280]}...",
         color=COLOR_PRIMARY
     )
     
+    embed.add_field(name="📍 Location", value=f"`{job.location}` {'(Remote 🏠)' if job.is_remote else ''}", inline=True)
+    embed.add_field(name="💰 Paygrade / Salary", value=f"`{job.salary_range}`", inline=True)
+    embed.add_field(name="🕒 Employment Type", value=f"`{job.employment_type}`", inline=True)
+    
+    if job.company and "Live" not in job.company and "Portal" not in job.company:
+        embed.add_field(name="🏢 Company Filter", value=f"`{job.company}`", inline=True)
+
+    embed.add_field(
+        name="🔗 Where to Apply",
+        value=f"**[👉 Click Here to Open & Apply on {provider_name}]({job.apply_url})**",
+        inline=False
+    )
+    
     if job.company_logo_url:
         embed.set_thumbnail(url=job.company_logo_url)
 
-    embed.set_footer(text=f"Job {current_idx} of {total_count} • ID: {job.job_id} • Source: {job.provider.upper()}")
+    embed.set_footer(text=f"Result {current_idx} of {total_count} • Source: {provider_name} • ID: {job.job_id}")
     return embed
 
 def create_job_detail_embed(job: CachedJob) -> discord.Embed:
-    """Format full job details embed."""
+    """Format clean full job details embed."""
+    provider_name = job.provider.replace("_", " ").title()
     embed = discord.Embed(
-        title=f"💼 {job.title} @ {job.company}",
+        title=f"💼 {job.title}",
         url=job.apply_url,
-        description=f"### Job Overview\n"
-                    f"- **Location:** 📍 `{job.location}`\n"
-                    f"- **Work Mode:** {'🏠 Remote' if job.is_remote else '🏢 Onsite / Hybrid'}\n"
-                    f"- **Employment Type:** 🕒 `{job.employment_type}`\n"
-                    f"- **Compensation:** 💰 `{job.salary_range}`\n"
-                    f"- **Apply Method:** `{job.apply_type}`\n\n"
-                    f"### Detailed Description\n{job.description[:1800]}...",
         color=0x2ECC71
     )
-    if job.company_logo_url:
-        embed.set_thumbnail(url=job.company_logo_url)
+    embed.add_field(name="📍 Location", value=f"`{job.location}` {'(Remote 🏠)' if job.is_remote else ''}", inline=True)
+    embed.add_field(name="💰 Paygrade / Salary", value=f"`{job.salary_range}`", inline=True)
+    embed.add_field(name="🕒 Employment Type", value=f"`{job.employment_type}`", inline=True)
     
-    embed.add_field(name="Job ID", value=f"`{job.job_id}`", inline=True)
-    embed.add_field(name="Source Platform", value=f"`{job.provider.upper()}`", inline=True)
-    embed.set_footer(text="Use the buttons below or `/jobs apply` to submit your application.")
+    if job.company and "Live" not in job.company and "Portal" not in job.company:
+        embed.add_field(name="🏢 Company Filter", value=f"`{job.company}`", inline=True)
+
+    embed.add_field(
+        name="🔗 Direct Application Link",
+        value=f"**[👉 Open Direct Application Portal ({provider_name})]({job.apply_url})**",
+        inline=False
+    )
+    embed.set_footer(text=f"Source: {provider_name} • ID: {job.job_id}")
     return embed
 
 def create_resume_review_embed(review: Dict[str, Any], candidate_name: str) -> discord.Embed:
