@@ -125,7 +125,15 @@ class JobService:
 
         all_jobs: List[CachedJob] = []
         for comp in target_list:
-            career_info = get_company_career_url(comp, role, location)
+            matched = find_company_match(comp)
+            if matched:
+                career_info = get_company_career_url(comp, role, location)
+            else:
+                try:
+                    career_info = await gemini_service.discover_company_career_portal(comp, role, location)
+                except Exception:
+                    career_info = get_company_career_url(comp, role, location)
+
             job_id = f"cp-{abs(hash(comp.lower() + role.lower())) % 10000000:07d}"
             
             existing = await db.execute(select(CachedJob).where(CachedJob.job_id == job_id))

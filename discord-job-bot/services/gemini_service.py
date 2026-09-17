@@ -481,5 +481,61 @@ class GeminiResumeService:
             ]
         }
 
+    async def discover_company_career_portal(
+        self,
+        company_name: str,
+        target_role: str = "Software Engineer",
+        location: str = "India"
+    ) -> Dict[str, Any]:
+        """Use Gemini AI to dynamically discover exact official career portal, ATS link, and hiring info for any company."""
+        clean_comp = company_name.strip()
+        if not clean_comp:
+            return {
+                "name": "Tech Company",
+                "portal_name": "Careers Portal",
+                "home_url": "https://careers.google.com",
+                "apply_url": "https://www.google.com/about/careers",
+                "tech_stack": ["Python", "Java", "Cloud"],
+                "ats_type": "DIRECT_CAREER",
+                "hiring_locations": [location],
+                "description": "Explore engineering opportunities."
+            }
+
+        if self._client and self.api_key:
+            try:
+                prompt = (
+                    f"You are an expert tech recruiter and talent intelligence AI. "
+                    f"Provide the exact official career portal and hiring intelligence for the company: '{clean_comp}'.\n"
+                    f"Candidate target role: '{target_role}', location: '{location}'.\n\n"
+                    f"Return ONLY a valid JSON object matching this schema:\n"
+                    "{\n"
+                    '  "name": "<Official canonical company name, e.g. Google, Swiggy, Uber>",\n'
+                    '  "portal_name": "<Display name of their career portal, e.g. Google Careers, Swiggy Careers>",\n'
+                    '  "home_url": "<Official root careers page URL, e.g. https://careers.google.com or https://careers.swiggy.com>",\n'
+                    '  "apply_url": "<Exact job search URL for target role, e.g. https://www.google.com/about/careers/applications/jobs/results/?q=Software+Engineer or Workday/Greenhouse/Lever/Ashby URL>",\n'
+                    '  "tech_stack": ["<key tech 1>", "<key tech 2>", "<key tech 3>", "<key tech 4>"],\n'
+                    '  "ats_type": "<DIRECT_CAREER or ATS_PORTAL or WORKDAY or GREENHOUSE>",\n'
+                    '  "hiring_locations": ["<top location 1>", "<top location 2>", "<top location 3>"],\n'
+                    '  "interview_rounds": ["<e.g. Online Assessment>", "<DSA / Problem Solving>", "<System Design / LLD>", "<Hiring Manager / Values>"],\n'
+                    '  "description": "<2-sentence description of the company engineering team, products, and hiring culture>"\n'
+                    "}"
+                )
+
+                response = self._client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                )
+                cleaned = re.sub(r"^```json\s*", "", response.text.strip())
+                cleaned = re.sub(r"```$", "", cleaned).strip()
+                data = json.loads(cleaned)
+                return data
+            except Exception as e:
+                logger.warning(f"Gemini company career discovery error: {e}")
+
+        # Static / Heuristic fallback if Gemini API unavailable or fails
+        from services.company_directory import get_company_career_url
+        return get_company_career_url(clean_comp, target_role, location)
+
 gemini_service = GeminiResumeService()
+
 

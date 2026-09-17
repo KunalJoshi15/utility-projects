@@ -455,4 +455,23 @@ async def test_company_directory_and_target_companies_portals(test_db: AsyncSess
     assert "careers.swiggy.com" in jobs[2].apply_url
 
 
+@pytest.mark.asyncio
+async def test_gemini_discover_company_career_portal():
+    from services.gemini_service import gemini_service
+    
+    # Test discovery for known and arbitrary companies
+    portal_data = await gemini_service.discover_company_career_portal(
+        company_name="Uber",
+        target_role="Backend Engineer",
+        location="Bengaluru"
+    )
+    
+    assert portal_data is not None
+    assert "name" in portal_data
+    assert "uber" in portal_data["name"].lower()
+    assert "apply_url" in portal_data
+    assert "careers" in portal_data["apply_url"].lower() or "uber" in portal_data["apply_url"].lower()
+
+
+
 
