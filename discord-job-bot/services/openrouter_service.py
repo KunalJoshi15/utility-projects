@@ -50,7 +50,10 @@ class OpenRouterAIService:
             from google import genai
             client = None
             if key and not key.startswith("your_"):
-                client = genai.Client(api_key=key)
+                if key.startswith("AQ.") or self.ai_provider == "vertex":
+                    client = genai.Client(vertexai=True, api_key=key, project=self.gcp_project, location=self.gcp_location)
+                else:
+                    client = genai.Client(api_key=key)
             elif self.gcp_project:
                 # Vertex AI client
                 client = genai.Client(vertexai=True, project=self.gcp_project, location=self.gcp_location)

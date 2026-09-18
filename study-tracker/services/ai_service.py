@@ -50,7 +50,7 @@ class StudyTrackerAIService:
             from google.genai import types
             client = None
             if key and not key.startswith("your_"):
-                if self.ai_provider == "vertex":
+                if key.startswith("AQ.") or self.ai_provider == "vertex":
                     client = genai.Client(vertexai=True, api_key=key, project=self.gcp_project, location=self.gcp_location)
                 else:
                     client = genai.Client(api_key=key)

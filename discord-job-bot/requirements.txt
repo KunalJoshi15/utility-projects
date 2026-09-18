@@ -16,6 +16,7 @@ playwright-stealth>=1.0.6
 
 # OpenRouter AI & PDF Parsing
 pypdf>=3.17.0
+google-genai>=1.0.0
 
 # Configuration & Security
 pydantic>=2.5.3
