@@ -187,7 +187,7 @@ class TopicService:
                 StudyTopicItem.discord_id == discord_id,
                 func.lower(StudyTopicItem.topic_name) == clean_title.lower()
             )
-            existing_topic = (await db.execute(stmt)).scalar_one_or_none()
+            existing_topic = (await db.execute(stmt)).scalars().first()
 
             if existing_topic:
                 existing_topic.problems_solved = (existing_topic.problems_solved or 0) + topic_probs

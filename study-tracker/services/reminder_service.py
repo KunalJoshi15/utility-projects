@@ -70,7 +70,7 @@ class ReminderService:
                     DailyStudySession.discord_id == prof.discord_id,
                     DailyStudySession.session_date == today_str
                 )
-                today_sess = (await db.execute(sess_stmt)).scalar_one_or_none()
+                today_sess = (await db.execute(sess_stmt)).scalars().first()
                 if today_sess:
                     continue # Studied today! Good job!
 
