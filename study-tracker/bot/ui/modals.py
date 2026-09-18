@@ -194,3 +194,74 @@ class EditLogModal(discord.ui.Modal):
         embed = create_session_edited_embed(result, interaction.user.display_name or interaction.user.name)
         await interaction.followup.send(embed=embed)
 
+
+class EndLiveSessionModal(discord.ui.Modal):
+    """Interactive modal popup for concluding a live study session and entering multiple topics, problems, and notes."""
+
+    def __init__(self, initial_topics: str = "General Study", initial_category: str = "General"):
+        super().__init__(title="⏹️ Conclude Live Study Session")
+
+        self.topics_input = discord.ui.TextInput(
+            label="Topics Covered (Number them if multiple)",
+            style=discord.TextStyle.paragraph,
+            placeholder="1. Binary Search Trees\n2. Dynamic Programming: 0/1 Knapsack\n3. Redis Cache Eviction",
+            default=initial_topics,
+            required=True,
+            max_length=1000
+        )
+        self.add_item(self.topics_input)
+
+        self.problems_input = discord.ui.TextInput(
+            label="Problems / Questions Solved",
+            style=discord.TextStyle.short,
+            placeholder="3",
+            default="0",
+            required=False,
+            max_length=5
+        )
+        self.add_item(self.problems_input)
+
+        self.notes_input = discord.ui.TextInput(
+            label="Study Notes & Key Takeaways (Optional)",
+            style=discord.TextStyle.paragraph,
+            placeholder="Key insights, time/space complexities, algorithms implemented...",
+            required=False,
+            max_length=2000
+        )
+        self.add_item(self.notes_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False)
+        from services.live_session_service import live_session_service
+        from bot.ui.embeds import create_live_session_ended_embed
+
+        try:
+            probs = int(self.problems_input.value.strip()) if self.problems_input.value.strip().isdigit() else 0
+        except ValueError:
+            probs = 0
+
+        notes_val = self.notes_input.value.strip() if self.notes_input.value.strip() else None
+
+        async with get_db() as db:
+            try:
+                result = await live_session_service.stop_live_session(
+                    db=db,
+                    discord_id=str(interaction.user.id),
+                    notes=notes_val,
+                    raw_topics=self.topics_input.value,
+                    problems_solved=probs,
+                    username=interaction.user.name,
+                    display_name=interaction.user.display_name
+                )
+            except ValueError as e:
+                await interaction.followup.send(f"❌ {e}", ephemeral=True)
+                return
+            except Exception as e:
+                logger.error(f"Error ending live study session modal: {e}", exc_info=True)
+                await interaction.followup.send("❌ An error occurred while concluding your study session.", ephemeral=True)
+                return
+
+        embed = create_live_session_ended_embed(result, interaction.user.display_name or interaction.user.name)
+        await interaction.followup.send(embed=embed)
+
+

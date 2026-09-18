@@ -296,49 +296,89 @@ def create_live_session_started_embed(session: Any, display_name: str) -> discor
     """Format real-time live study session start panel."""
     start_ts = int(session.start_time.timestamp()) if hasattr(session.start_time, 'timestamp') else 0
     embed = discord.Embed(
-        title="🟢 Live Study Session Active",
+        title="🟢 Live Study Session Started",
         description=(
             f"**Candidate:** `{display_name}`\n"
-            f"**Current Topic / Goal:** 🎯 **{session.topic_or_goal}**\n"
+            f"**Goal / Topics:** 🎯 **{session.topic_or_goal}**\n"
             f"**Category:** `{session.category}`\n"
-            f"**Started:** <t:{start_ts}:t> (<t:{start_ts}:R>)\n\n"
-            f"💡 **Session Rules:**\n"
-            f"• Click **`⏹️ End Study Session`** below or run `/session stop` when finished.\n"
-            f"• 🔌 **Offline Auto-Stop:** If your Discord status changes to **Offline**, your session will automatically save and conclude!"
+            f"**Started At:** <t:{start_ts}:t> (<t:{start_ts}:R>)\n\n"
+            f"⏱️ **Session Time Tracking:**\n"
+            f"• Your elapsed study duration will be **automatically computed** from start to stop.\n"
+            f"• **Multiple Topics:** You can study and log multiple topics in this session (e.g. `1. Topic A 2. Topic B`).\n"
+            f"• When finished, click **`⏹️ End Study Session`** below or run `/session stop`.\n"
+            f"• 🔌 **Offline Auto-Stop:** If your Discord status turns **Offline**, your progress will be auto-saved!"
         ),
         color=COLOR_SUCCESS
     )
-    embed.set_footer(text="Stay focused! Your elapsed minutes are being tracked in real time.")
+    embed.set_footer(text="Stay focused! Your exact study time is actively being tracked.")
     return embed
 
 def create_live_session_ended_embed(result: Dict[str, Any], display_name: str) -> discord.Embed:
     """Format live session completion summary receipt."""
     duration_mins = result.get("live_duration_minutes", 1)
+    duration_secs = result.get("live_duration_seconds", 0)
     topics = result.get("extracted_topics", [])
+    new_topics = result.get("new_topics", [])
+    revisited_topics = result.get("revisited_topics", [])
+    problems_solved = result.get("problems_solved", 0)
     rank_info = result.get("rank_info", {})
     did_level_up = result.get("did_level_up", False)
     new_badges = result.get("new_badges", [])
     streak = result.get("streak", 1)
+    started_at = result.get("started_at")
+    ended_at = result.get("ended_at")
+
+    start_str = f"<t:{int(started_at.timestamp())}:t>" if started_at and hasattr(started_at, 'timestamp') else "Earlier"
+    end_str = f"<t:{int(ended_at.timestamp())}:t>" if ended_at and hasattr(ended_at, 'timestamp') else "Just now"
 
     title = f"🎉 Level Up! Promoted to {rank_info.get('title')}!" if did_level_up else "🏁 Live Study Session Concluded"
     color = COLOR_WARNING if did_level_up else COLOR_SUCCESS
+
+    dur_display = f"`{duration_mins} Minutes`" if duration_mins >= 1 else f"`{duration_secs} Seconds`"
 
     embed = discord.Embed(
         title=title,
         description=(
             f"**Great work, `{display_name}`!** Here is your session breakdown:\n\n"
-            f"• ⏱️ **Active Duration Logged:** **`{duration_mins} Minutes`**\n"
+            f"• ⏱️ **Time Tracked:** {start_str} ➔ {end_str} (**{dur_display}**)\n"
+            f"• 💡 **Problems Solved:** `{problems_solved} Problems`\n"
             f"• 🔥 **Updated Streak:** **`{streak} Days Active`**\n"
             f"• 🏆 **Current Rank:** {rank_info.get('icon', '🥉')} **{rank_info.get('title', 'Novice')}** (Level {rank_info.get('level', 1)})\n"
-            f"• 📚 **Total Topics Mastered:** `{result.get('total_topics', 0)}`"
+            f"• 📚 **Total Unique Topics Mastered:** `{result.get('total_topics', 0)}`"
         ),
         color=color
     )
 
-    if topics:
+    # 1. Multi-Topic Breakdown: New vs Revisiting
+    if new_topics:
+        new_lines = []
+        for idx, t in enumerate(new_topics, 1):
+            probs_tag = f" — `{t.get('problems_solved', 0)} problems`" if t.get('problems_solved', 0) > 0 else ""
+            new_lines.append(f"`{idx}.` **{t['topic_name']}** `[{t.get('category', 'General')}]`{probs_tag}")
+        embed.add_field(
+            name=f"✨ New Topics Mastered ({len(new_topics)})",
+            value="\n".join(new_lines)[:1000],
+            inline=False
+        )
+
+    if revisited_topics:
+        rev_lines = []
+        for idx, t in enumerate(revisited_topics, 1):
+            added = t.get("problems_added", 0)
+            tot = t.get("total_problems", 0)
+            rev_cnt = t.get("revision_count", 1)
+            prob_info = f"+{added} problems ({tot} total)" if added > 0 else f"{tot} total problems"
+            rev_lines.append(f"`{idx}.` **{t['topic_name']}** — `{prob_info}` • `Revision #{rev_cnt}`")
+        embed.add_field(
+            name=f"🔄 Existing Topics Practiced ({len(revisited_topics)})",
+            value="\n".join(rev_lines)[:1000],
+            inline=False
+        )
+
+    if not new_topics and not revisited_topics and topics:
         topic_lines = [f"`{i}.` **{t}**" for i, t in enumerate(topics, 1)]
         embed.add_field(
-            name="🎯 Topics Mastered",
+            name="🎯 Topics Covered",
             value="\n".join(topic_lines)[:1000],
             inline=False
         )

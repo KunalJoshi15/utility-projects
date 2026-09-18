@@ -120,6 +120,8 @@ class LiveSessionService:
 
         result["live_duration_minutes"] = duration_minutes
         result["live_duration_seconds"] = int(duration_seconds)
+        result["started_at"] = start
+        result["ended_at"] = now
         return result
 
     async def auto_stop_offline_session(

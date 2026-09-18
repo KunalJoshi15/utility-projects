@@ -129,25 +129,21 @@ class LiveSessionControlView(discord.ui.View):
             await interaction.response.send_message("❌ This is not your study session!", ephemeral=True)
             return
 
-        await interaction.response.defer()
         from services.live_session_service import live_session_service
+        from bot.ui.modals import EndLiveSessionModal
 
         async with get_db() as db:
-            try:
-                result = await live_session_service.stop_live_session(
-                    db=db,
-                    discord_id=str(interaction.user.id),
-                    username=interaction.user.name,
-                    display_name=interaction.user.display_name
-                )
-            except ValueError as e:
-                await interaction.followup.send(f"❌ {e}", ephemeral=True)
-                return
+            session = await live_session_service.get_active_session(db, str(interaction.user.id))
 
-        embed = create_live_session_ended_embed(result, interaction.user.display_name or interaction.user.name)
-        # Disable buttons on session completion
-        self.stop()
-        await interaction.edit_original_response(embed=embed, view=None)
+        if not session:
+            await interaction.response.send_message("ℹ️ You do not have an active study session running.", ephemeral=True)
+            return
+
+        modal = EndLiveSessionModal(
+            initial_topics=session.topic_or_goal or "General Study",
+            initial_category=session.category or "General"
+        )
+        await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="⏱️ Check Status", style=discord.ButtonStyle.secondary, custom_id="live_session_status")
     async def btn_status(self, interaction: discord.Interaction, button: discord.ui.Button):
