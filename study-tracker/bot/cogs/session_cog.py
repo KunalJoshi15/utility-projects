@@ -62,6 +62,23 @@ class SessionCog(commands.GroupCog, group_name="session"):
         view = LiveSessionControlView(discord_id=str(interaction.user.id), display_name=name)
         await interaction.followup.send(embed=embed, view=view)
 
+    @start_session.autocomplete("topic")
+    async def start_topic_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ) -> list[app_commands.Choice[str]]:
+        try:
+            async with get_db() as db:
+                topics = await topic_service.get_user_existing_topics_autocomplete(
+                    db=db,
+                    discord_id=str(interaction.user.id),
+                    current_query=current
+                )
+            return [app_commands.Choice(name=t[:100], value=t[:100]) for t in topics]
+        except Exception:
+            return []
+
     @app_commands.command(
         name="stop",
         description="Conclude your active live study session and log your minutes"
@@ -101,6 +118,23 @@ class SessionCog(commands.GroupCog, group_name="session"):
 
         embed = create_live_session_ended_embed(result, interaction.user.display_name or interaction.user.name)
         await interaction.followup.send(embed=embed)
+
+    @stop_session.autocomplete("topics")
+    async def stop_topics_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ) -> list[app_commands.Choice[str]]:
+        try:
+            async with get_db() as db:
+                topics = await topic_service.get_user_existing_topics_autocomplete(
+                    db=db,
+                    discord_id=str(interaction.user.id),
+                    current_query=current
+                )
+            return [app_commands.Choice(name=t[:100], value=t[:100]) for t in topics]
+        except Exception:
+            return []
 
     @app_commands.command(
         name="status",

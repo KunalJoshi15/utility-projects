@@ -19,8 +19,10 @@ def _progress_bar(percentage: float, length: int = 10) -> str:
 
 def create_study_logged_embed(result: Dict[str, Any], display_name: str) -> discord.Embed:
     """Format celebratory embed when a study session with 1 or multiple topics is logged."""
-    topics = result["extracted_topics"]
-    count = result["topics_count"]
+    topics = result.get("extracted_topics", [])
+    count = result.get("topics_count", len(topics))
+    new_topics = result.get("new_topics", [])
+    revisited_topics = result.get("revisited_topics", [])
     notes = result.get("notes")
     rank_info = result.get("rank_info", {})
     did_level_up = result.get("did_level_up", False)
@@ -34,26 +36,49 @@ def create_study_logged_embed(result: Dict[str, Any], display_name: str) -> disc
         title=title,
         description=(
             f"**Candidate:** `{display_name}` • **Rank:** {rank_info.get('icon', '🥉')} **{rank_info.get('title', 'Novice')}** (Level {rank_info.get('level', 1)})\n"
-            f"**Current Streak:** 🔥 `{streak} Days Active` • **Total Topics Mastered:** `{result.get('total_topics', 0)}`\n"
+            f"**Current Streak:** 🔥 `{streak} Days Active` • **Total Topics Mastered:** `{result.get('total_topics', 0)}` • **Total Problems:** `{result.get('total_problems', 0)}`\n"
             f"**Next Rank Target:** {_progress_bar(rank_info.get('progress_pct', 0))} (`{rank_info.get('topics_left', 0)} topics left`)"
         ),
         color=color
     )
 
-    # 1. Extracted Topics Field
-    topic_lines = []
-    for idx, t in enumerate(topics, 1):
-        topic_lines.append(f"`{idx}.` **{t}**")
-    
-    topics_value = "\n".join(topic_lines)
-    if len(topics_value) > 1000:
-        topics_value = topics_value[:980] + "\n*(more topics...)*"
+    # 1. New Topics Mastered vs Existing Topics Practiced
+    if new_topics:
+        new_lines = []
+        for idx, t in enumerate(new_topics, 1):
+            probs_tag = f" — `{t.get('problems_solved', 0)} problems`" if t.get('problems_solved', 0) > 0 else ""
+            new_lines.append(f"`{idx}.` **{t['topic_name']}** `[{t.get('category', 'General')}]`{probs_tag}")
+        embed.add_field(
+            name=f"✨ New Topics Mastered ({len(new_topics)})",
+            value="\n".join(new_lines)[:1000],
+            inline=False
+        )
 
-    embed.add_field(
-        name=f"📚 Topics Covered Today ({count} total)",
-        value=topics_value,
-        inline=False
-    )
+    if revisited_topics:
+        rev_lines = []
+        for idx, t in enumerate(revisited_topics, 1):
+            added = t.get("problems_added", 0)
+            tot = t.get("total_problems", 0)
+            rev_cnt = t.get("revision_count", 1)
+            prob_info = f"+{added} problems ({tot} total)" if added > 0 else f"{tot} total problems"
+            rev_lines.append(f"`{idx}.` **{t['topic_name']}** — `{prob_info}` • `Revision #{rev_cnt}`")
+        embed.add_field(
+            name=f"🔄 Existing Topics Practiced ({len(revisited_topics)})",
+            value="\n".join(rev_lines)[:1000],
+            inline=False
+        )
+
+    # Fallback if neither structured list is present
+    if not new_topics and not revisited_topics and topics:
+        topic_lines = [f"`{idx}.` **{t}**" for idx, t in enumerate(topics, 1)]
+        topics_value = "\n".join(topic_lines)
+        if len(topics_value) > 1000:
+            topics_value = topics_value[:980] + "\n*(more topics...)*"
+        embed.add_field(
+            name=f"📚 Topics Covered Today ({count} total)",
+            value=topics_value,
+            inline=False
+        )
 
     # 2. Attached Notes & Takeaways
     if notes:
@@ -146,7 +171,9 @@ def create_topics_list_embed(
     topic_lines = []
     current_len = 0
     for idx, t in enumerate(topics_list, 1):
-        line = f"`{idx}.` **{t.topic_name}** `[{t.category}]` *({t.logged_date})*"
+        probs_val = getattr(t, 'problems_solved', 0) or 0
+        rev_val = getattr(t, 'revision_count', 1) or 1
+        line = f"`{idx}.` **{t.topic_name}** `[{t.category}]` — `{probs_val} problems` • `Rev #{rev_val}` *({t.logged_date})*"
         if current_len + len(line) + 60 > 920:
             break
         topic_lines.append(line)

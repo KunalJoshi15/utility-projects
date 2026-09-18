@@ -74,6 +74,24 @@ class StudyCog(commands.GroupCog, group_name="study"):
         embed = create_study_logged_embed(result, interaction.user.display_name or interaction.user.name)
         await interaction.followup.send(embed=embed)
 
+    @log_study.autocomplete("topics")
+    async def log_topics_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Provides instant autocomplete suggestions from candidate's existing mastered topics."""
+        try:
+            async with get_db() as db:
+                topics = await topic_service.get_user_existing_topics_autocomplete(
+                    db=db,
+                    discord_id=str(interaction.user.id),
+                    current_query=current
+                )
+            return [app_commands.Choice(name=t[:100], value=t[:100]) for t in topics]
+        except Exception:
+            return []
+
     @app_commands.command(
         name="quicklog",
         description="Open an interactive popup modal to easily enter multiple topics and notes"

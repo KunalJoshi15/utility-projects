@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from config.settings import settings
 from database.models import Base
 
+from sqlalchemy import text
+
 logger = logging.getLogger(__name__)
 
 engine = create_async_engine(
@@ -25,6 +27,15 @@ async def init_db() -> None:
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            # Safe migration for problems_solved and revision_count in study_topic_items
+            try:
+                await conn.execute(text("ALTER TABLE study_topic_items ADD COLUMN problems_solved INTEGER DEFAULT 0"))
+            except Exception:
+                pass
+            try:
+                await conn.execute(text("ALTER TABLE study_topic_items ADD COLUMN revision_count INTEGER DEFAULT 1"))
+            except Exception:
+                pass
         logger.info("Study tracker database initialized successfully.")
     except Exception as e:
         logger.error(f"Error initializing study database: {e}")

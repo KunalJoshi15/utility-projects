@@ -213,7 +213,7 @@ class ExportService:
         ws3.views.sheetView[0].showGridLines = True
 
         topic_headers = [
-            "Topic ID", "Topic Name", "Domain / Category", "Logged Date", "Attached Notes & Revision Summary"
+            "Topic ID", "Topic Name", "Domain / Category", "Problems Solved", "Revisions / Sessions", "Logged Date", "Attached Notes & Revision Summary"
         ]
 
         for col_idx, h in enumerate(topic_headers, start=1):
@@ -227,8 +227,10 @@ class ExportService:
             ws3.cell(row=row_idx, column=1, value=t.get("id")).alignment = align_center
             ws3.cell(row=row_idx, column=2, value=t.get("topic_name", "")).alignment = align_left
             ws3.cell(row=row_idx, column=3, value=t.get("category", "General")).alignment = align_center
-            ws3.cell(row=row_idx, column=4, value=t.get("logged_date", "")).alignment = align_center
-            ws3.cell(row=row_idx, column=5, value=t.get("notes") or "").alignment = align_wrap_left
+            ws3.cell(row=row_idx, column=4, value=t.get("problems_solved", 0)).alignment = align_center
+            ws3.cell(row=row_idx, column=5, value=t.get("revision_count", 1)).alignment = align_center
+            ws3.cell(row=row_idx, column=6, value=t.get("logged_date", "")).alignment = align_center
+            ws3.cell(row=row_idx, column=7, value=t.get("notes") or "").alignment = align_wrap_left
 
             fill_row = fill_zebra if row_idx % 2 == 0 else PatternFill(fill_type=None)
             for c_idx in range(1, len(topic_headers) + 1):

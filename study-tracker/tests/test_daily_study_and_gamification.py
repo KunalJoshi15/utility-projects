@@ -202,3 +202,102 @@ async def test_live_study_session_lifecycle(db_session: AsyncSession):
     notes_list, cnt = await topic_service.get_user_notes(db_session, user_id)
     assert cnt == 1
     assert "consumer group offsets" in notes_list[0]["notes"]
+
+@pytest.mark.asyncio
+async def test_topic_deduplication_and_problem_accumulation(db_session: AsyncSession):
+    """
+    Verify that studying the same topic multiple times:
+    1. Updates pre-existing topic record without duplicating topic rows.
+    2. Correctly accumulates problems solved and increments revision count.
+    3. Keeps unique topics count accurate (total_topics_count = 1).
+    4. Correctly updates total_problems_solved on user profile.
+    """
+    user_id = "user_dedup_1"
+
+    # Day 1: Study Dynamic Programming and solve 3 problems
+    res1 = await topic_service.log_study_activity(
+        db=db_session,
+        discord_id=user_id,
+        raw_topics="Dynamic Programming",
+        notes="Solved 0/1 Knapsack and Subset Sum",
+        duration_minutes=60,
+        problems_solved=3,
+        category="DSA",
+        username="DevUser",
+        display_name="Dev User"
+    )
+
+    assert res1["total_topics"] == 1
+    assert res1["total_problems"] == 3
+    assert len(res1["new_topics"]) == 1
+    assert len(res1["revisited_topics"]) == 0
+    assert res1["new_topics"][0]["topic_name"] == "Dynamic Programming"
+    assert res1["new_topics"][0]["problems_solved"] == 3
+
+    # Day 2: Study Dynamic Programming again (case-insensitive) and solve 4 more problems
+    res2 = await topic_service.log_study_activity(
+        db=db_session,
+        discord_id=user_id,
+        raw_topics="dynamic programming",
+        notes="Solved Longest Common Subsequence and Edit Distance",
+        duration_minutes=45,
+        problems_solved=4,
+        category="DSA",
+        username="DevUser",
+        display_name="Dev User"
+    )
+
+    # Total unique topics should STILL be 1, but total problems should be 7
+    assert res2["total_topics"] == 1
+    assert res2["total_problems"] == 7
+    assert len(res2["new_topics"]) == 0
+    assert len(res2["revisited_topics"]) == 1
+    assert res2["revisited_topics"][0]["topic_name"] == "Dynamic Programming"
+    assert res2["revisited_topics"][0]["problems_added"] == 4
+    assert res2["revisited_topics"][0]["total_problems"] == 7
+    assert res2["revisited_topics"][0]["revision_count"] == 2
+
+    # Verify database model values directly
+    from sqlalchemy import select
+    stmt = select(StudyTopicItem).where(StudyTopicItem.discord_id == user_id)
+    topics = list((await db_session.execute(stmt)).scalars().all())
+    assert len(topics) == 1
+    assert topics[0].topic_name == "Dynamic Programming"
+    assert topics[0].problems_solved == 7
+    assert topics[0].revision_count == 2
+    assert "Longest Common Subsequence" in topics[0].notes
+
+    # Day 3: Study 2 topics together (1 new: Binary Trees, 1 existing: Dynamic Programming) with 5 problems
+    res3 = await topic_service.log_study_activity(
+        db=db_session,
+        discord_id=user_id,
+        raw_topics="1. Dynamic Programming 2. Binary Trees",
+        notes="Mixed DP and Tree traversals",
+        duration_minutes=90,
+        problems_solved=5,
+        category="DSA",
+        username="DevUser",
+        display_name="Dev User"
+    )
+
+    # 5 problems divided between 2 topics -> 3 to DP, 2 to Binary Trees
+    assert res3["total_topics"] == 2
+    assert res3["total_problems"] == 12 # 7 + 5
+    assert len(res3["new_topics"]) == 1
+    assert res3["new_topics"][0]["topic_name"] == "Binary Trees"
+    assert res3["new_topics"][0]["problems_solved"] == 2
+    assert len(res3["revisited_topics"]) == 1
+    assert res3["revisited_topics"][0]["topic_name"] == "Dynamic Programming"
+    assert res3["revisited_topics"][0]["problems_added"] == 3
+    assert res3["revisited_topics"][0]["total_problems"] == 10 # 7 + 3
+    assert res3["revisited_topics"][0]["revision_count"] == 3
+
+    # Autocomplete test
+    ac_all = await topic_service.get_user_existing_topics_autocomplete(db_session, user_id, "")
+    assert len(ac_all) == 2
+    assert "Dynamic Programming" in ac_all
+    assert "Binary Trees" in ac_all
+
+    ac_filtered = await topic_service.get_user_existing_topics_autocomplete(db_session, user_id, "dyn")
+    assert ac_filtered == ["Dynamic Programming"]
+

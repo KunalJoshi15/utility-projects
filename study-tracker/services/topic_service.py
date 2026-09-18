@@ -91,6 +91,40 @@ class TopicService:
 
         return profile
 
+    async def count_distinct_user_topics(self, db: AsyncSession, discord_id: str) -> int:
+        """Count unique technical topics mastered by candidate."""
+        stmt = select(func.count(func.distinct(func.lower(StudyTopicItem.topic_name)))).where(
+            StudyTopicItem.discord_id == str(discord_id)
+        )
+        return (await db.execute(stmt)).scalar() or 0
+
+    async def get_user_existing_topics_autocomplete(
+        self,
+        db: AsyncSession,
+        discord_id: str,
+        current_query: str = ""
+    ) -> List[str]:
+        """Fetch candidate's existing topics for autocomplete suggestions."""
+        stmt = select(StudyTopicItem.topic_name).where(
+            StudyTopicItem.discord_id == str(discord_id)
+        )
+        if current_query and current_query.strip():
+            q = f"%{current_query.strip()}%"
+            stmt = stmt.where(StudyTopicItem.topic_name.ilike(q))
+
+        stmt = stmt.order_by(desc(StudyTopicItem.logged_at)).limit(50)
+        raw_names = list((await db.execute(stmt)).scalars().all())
+
+        seen = set()
+        unique_topics = []
+        for name in raw_names:
+            clean = name.strip()
+            if clean and clean.lower() not in seen:
+                seen.add(clean.lower())
+                unique_topics.append(clean)
+
+        return unique_topics[:25]
+
     async def log_study_activity(
         self,
         db: AsyncSession,
@@ -106,9 +140,13 @@ class TopicService:
         """
         Processes a daily study logging request:
         1. Extracts topics from raw_topics (single or numbered).
-        2. Creates DailyStudySession and individual StudyTopicItem records.
-        3. Updates user totals & streak.
-        4. Checks for Rank level-up and awards Badges.
+        2. Distributes problems solved across topics.
+        3. Checks if each topic exists for the candidate:
+           - If exists: updates problems_solved, increments revision_count, updates notes & last studied date.
+           - If not: creates new StudyTopicItem.
+        4. Creates DailyStudySession.
+        5. Updates user distinct topics count, minutes, problems solved, and streak.
+        6. Checks for Rank level-up and awards Badges.
         """
         extracted_topics = self.extract_numbered_topics(raw_topics)
         if not extracted_topics:
@@ -116,39 +154,85 @@ class TopicService:
 
         profile = await self.get_or_create_profile(db, discord_id, username, display_name)
         today_str = get_utc_date_str()
+        num_topics = len(extracted_topics)
+        problems_count = max(0, problems_solved)
+
+        # Distribute problems across topics
+        base_probs = problems_count // num_topics
+        rem_probs = problems_count % num_topics
 
         # 1. Create Daily Study Session
         session = DailyStudySession(
             discord_id=discord_id,
             session_date=today_str,
             duration_minutes=duration_minutes,
-            problems_solved=problems_solved,
+            problems_solved=problems_count,
             category=category,
             notes=notes.strip() if notes else None,
-            topics_count=len(extracted_topics)
+            topics_count=num_topics
         )
         db.add(session)
         await db.flush()
 
-        # 2. Add individual topic records
-        created_topics = []
-        for topic_title in extracted_topics:
-            topic_item = StudyTopicItem(
-                session_id=session.id,
-                discord_id=discord_id,
-                topic_name=topic_title[:250],
-                category=category,
-                notes=notes.strip() if notes else None,
-                logged_date=today_str
+        # 2. Add or update individual topic records
+        new_topics = []
+        revisited_topics = []
+
+        for idx, topic_title in enumerate(extracted_topics):
+            clean_title = topic_title[:250].strip()
+            topic_probs = base_probs + (1 if idx < rem_probs else 0)
+
+            # Check if candidate already has this topic
+            stmt = select(StudyTopicItem).where(
+                StudyTopicItem.discord_id == discord_id,
+                func.lower(StudyTopicItem.topic_name) == clean_title.lower()
             )
-            db.add(topic_item)
-            created_topics.append(topic_item)
+            existing_topic = (await db.execute(stmt)).scalar_one_or_none()
+
+            if existing_topic:
+                existing_topic.problems_solved = (existing_topic.problems_solved or 0) + topic_probs
+                existing_topic.revision_count = (existing_topic.revision_count or 1) + 1
+                existing_topic.logged_date = today_str
+                existing_topic.logged_at = datetime.now(timezone.utc)
+                existing_topic.session_id = session.id
+                if category and category != "General":
+                    existing_topic.category = category
+                if notes and notes.strip():
+                    existing_topic.notes = notes.strip()
+
+                revisited_topics.append({
+                    "topic_name": existing_topic.topic_name,
+                    "problems_added": topic_probs,
+                    "total_problems": existing_topic.problems_solved,
+                    "revision_count": existing_topic.revision_count,
+                    "category": existing_topic.category
+                })
+            else:
+                topic_item = StudyTopicItem(
+                    session_id=session.id,
+                    discord_id=discord_id,
+                    topic_name=clean_title,
+                    category=category,
+                    problems_solved=topic_probs,
+                    revision_count=1,
+                    notes=notes.strip() if notes else None,
+                    logged_date=today_str,
+                    logged_at=datetime.now(timezone.utc)
+                )
+                db.add(topic_item)
+                new_topics.append({
+                    "topic_name": clean_title,
+                    "problems_solved": topic_probs,
+                    "category": category
+                })
+
+        await db.flush()
 
         # 3. Update Profile Cumulative Statistics
         prev_level = profile.rank_level
-        profile.total_topics_count += len(extracted_topics)
+        profile.total_topics_count = await self.count_distinct_user_topics(db, discord_id)
         profile.total_study_minutes += max(0, duration_minutes)
-        profile.total_problems_solved += max(0, problems_solved)
+        profile.total_problems_solved += problems_count
 
         # 4. Update Study Streak
         streak_obj = await self._update_streak(db, discord_id, today_str)
@@ -164,7 +248,7 @@ class TopicService:
             discord_id=discord_id,
             total_topics=profile.total_topics_count,
             streak_count=streak_obj.current_streak,
-            session_topics_count=len(extracted_topics),
+            session_topics_count=num_topics,
             total_minutes=profile.total_study_minutes
         )
 
@@ -173,14 +257,17 @@ class TopicService:
         return {
             "session_id": session.id,
             "extracted_topics": extracted_topics,
-            "topics_count": len(extracted_topics),
+            "topics_count": num_topics,
+            "new_topics": new_topics,
+            "revisited_topics": revisited_topics,
             "notes": notes,
             "duration_minutes": duration_minutes,
-            "problems_solved": problems_solved,
+            "problems_solved": problems_count,
             "category": category,
             "streak": streak_obj.current_streak,
             "longest_streak": streak_obj.longest_streak,
             "total_topics": profile.total_topics_count,
+            "total_problems": profile.total_problems_solved,
             "total_hours": round(profile.total_study_minutes / 60, 1),
             "rank_info": rank_info,
             "did_level_up": did_level_up,
@@ -546,16 +633,20 @@ class TopicService:
         # Get topics before deletion
         t_stmt = select(StudyTopicItem.topic_name).where(StudyTopicItem.session_id == session.id)
         topics = list((await db.execute(t_stmt)).scalars().all())
-        topics_count = len(topics) if topics else session.topics_count
         duration_mins = session.duration_minutes or 0
         problems_count = session.problems_solved or 0
+
+        # Delete topics and session
+        await db.execute(delete(StudyTopicItem).where(StudyTopicItem.session_id == session.id))
+        await db.delete(session)
+        await db.flush()
 
         # Adjust User Profile totals
         prof_stmt = select(UserStudyProfile).where(UserStudyProfile.discord_id == discord_id)
         profile = (await db.execute(prof_stmt)).scalar_one_or_none()
 
         if profile:
-            profile.total_topics_count = max(0, profile.total_topics_count - topics_count)
+            profile.total_topics_count = await self.count_distinct_user_topics(db, discord_id)
             profile.total_study_minutes = max(0, profile.total_study_minutes - duration_mins)
             profile.total_problems_solved = max(0, profile.total_problems_solved - problems_count)
 
@@ -565,9 +656,6 @@ class TopicService:
         else:
             rank_info = gamification_service.get_rank_info(0)
 
-        # Delete topics and session
-        await db.execute(delete(StudyTopicItem).where(StudyTopicItem.session_id == session.id))
-        await db.delete(session)
         await db.commit()
 
         return {
@@ -607,42 +695,12 @@ class TopicService:
         if not profile:
             profile = await self.get_or_create_profile(db, discord_id)
 
-        # 1. Update topics if provided
-        topics_updated = False
-        final_topics = []
-        if new_raw_topics is not None and new_raw_topics.strip():
-            extracted = self.extract_numbered_topics(new_raw_topics)
-            if not extracted:
-                raise ValueError("No valid topic names found in your updated input.")
-
-            # Get old topic count
-            old_topics_stmt = select(StudyTopicItem).where(StudyTopicItem.session_id == session.id)
-            old_topics = list((await db.execute(old_topics_stmt)).scalars().all())
-            old_count = len(old_topics)
-            new_count = len(extracted)
-
-            # Remove old topic items
-            await db.execute(delete(StudyTopicItem).where(StudyTopicItem.session_id == session.id))
-
-            # Add new topic items
-            for topic_title in extracted:
-                item = StudyTopicItem(
-                    session_id=session.id,
-                    discord_id=discord_id,
-                    topic_name=topic_title[:250],
-                    category=new_category or session.category or "General",
-                    notes=new_notes.strip() if new_notes else session.notes,
-                    logged_date=session.session_date
-                )
-                db.add(item)
-
-            session.topics_count = new_count
-            profile.total_topics_count = max(0, profile.total_topics_count - old_count + new_count)
-            final_topics = extracted
-            topics_updated = True
-        else:
-            t_stmt = select(StudyTopicItem.topic_name).where(StudyTopicItem.session_id == session.id)
-            final_topics = list((await db.execute(t_stmt)).scalars().all())
+        # 1. Update Problems Solved
+        old_prob = session.problems_solved or 0
+        target_problems = new_problems if new_problems is not None else old_prob
+        diff_prob = target_problems - old_prob
+        profile.total_problems_solved = max(0, profile.total_problems_solved + diff_prob)
+        session.problems_solved = max(0, target_problems)
 
         # 2. Update Duration
         if new_duration is not None:
@@ -651,20 +709,52 @@ class TopicService:
             profile.total_study_minutes = max(0, profile.total_study_minutes + diff_dur)
             session.duration_minutes = max(0, new_duration)
 
-        # 3. Update Problems Solved
-        if new_problems is not None:
-            old_prob = session.problems_solved or 0
-            diff_prob = new_problems - old_prob
-            profile.total_problems_solved = max(0, profile.total_problems_solved + diff_prob)
-            session.problems_solved = max(0, new_problems)
-
-        # 4. Update Category
+        # 3. Update Category
         if new_category is not None and new_category.strip():
             session.category = new_category.strip()
 
-        # 5. Update Notes
+        # 4. Update Notes
         if new_notes is not None:
             session.notes = new_notes.strip() if new_notes.strip() else None
+
+        # 5. Update topics if provided
+        final_topics = []
+        if new_raw_topics is not None and new_raw_topics.strip():
+            extracted = self.extract_numbered_topics(new_raw_topics)
+            if not extracted:
+                raise ValueError("No valid topic names found in your updated input.")
+
+            # Remove old topic items for this session
+            await db.execute(delete(StudyTopicItem).where(StudyTopicItem.session_id == session.id))
+
+            num_topics = len(extracted)
+            base_probs = max(0, session.problems_solved) // num_topics
+            rem_probs = max(0, session.problems_solved) % num_topics
+
+            # Add new topic items
+            for idx, topic_title in enumerate(extracted):
+                clean_title = topic_title[:250].strip()
+                t_prob = base_probs + (1 if idx < rem_probs else 0)
+
+                item = StudyTopicItem(
+                    session_id=session.id,
+                    discord_id=discord_id,
+                    topic_name=clean_title,
+                    category=new_category or session.category or "General",
+                    problems_solved=t_prob,
+                    revision_count=1,
+                    notes=new_notes.strip() if new_notes else session.notes,
+                    logged_date=session.session_date
+                )
+                db.add(item)
+
+            session.topics_count = num_topics
+            await db.flush()
+            profile.total_topics_count = await self.count_distinct_user_topics(db, discord_id)
+            final_topics = extracted
+        else:
+            t_stmt = select(StudyTopicItem.topic_name).where(StudyTopicItem.session_id == session.id)
+            final_topics = list((await db.execute(t_stmt)).scalars().all())
 
         # Re-evaluate rank
         rank_info = gamification_service.get_rank_info(profile.total_topics_count)
@@ -683,6 +773,7 @@ class TopicService:
             "problems_solved": session.problems_solved,
             "category": session.category,
             "total_topics": profile.total_topics_count,
+            "total_problems": profile.total_problems_solved,
             "total_hours": round(profile.total_study_minutes / 60, 1),
             "rank_info": rank_info
         }
@@ -756,6 +847,8 @@ class TopicService:
             "id": t.id,
             "topic_name": t.topic_name,
             "category": t.category,
+            "problems_solved": t.problems_solved or 0,
+            "revision_count": t.revision_count or 1,
             "notes": t.notes,
             "logged_date": t.logged_date,
             "logged_at": t.logged_at

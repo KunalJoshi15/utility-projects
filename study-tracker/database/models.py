@@ -77,6 +77,8 @@ class StudyTopicItem(Base):
     
     topic_name = Column(String(255), nullable=False, index=True)
     category = Column(String(50), default="General")
+    problems_solved = Column(Integer, default=0)                # Problems solved under this topic
+    revision_count = Column(Integer, default=1)                 # How many sessions studied this topic
     notes = Column(Text, nullable=True)                          # Specific takeaway for this topic
     logged_date = Column(String(20), nullable=False, index=True) # "YYYY-MM-DD"
     logged_at = Column(DateTime, default=get_utc_now, index=True)
