@@ -203,6 +203,12 @@ class TopicService:
             )
             db.add(streak)
             await db.flush()
+        if not streak.last_study_date:
+            streak.current_streak = 1
+            streak.longest_streak = max(streak.longest_streak, 1)
+            streak.total_days_studied += 1
+            streak.last_study_date = today_str
+            await db.flush()
             return streak
 
         if streak.last_study_date == today_str:
@@ -216,6 +222,8 @@ class TopicService:
 
         if days_diff == 1:
             streak.current_streak += 1
+            if streak.current_streak in (7, 14, 30, 50, 100):
+                streak.freeze_count = (streak.freeze_count or 0) + 1
         else:
             streak.current_streak = 1 # Streak reset
 
@@ -226,6 +234,138 @@ class TopicService:
         streak.last_study_date = today_str
         await db.flush()
         return streak
+
+    async def get_user_streak_details(
+        self,
+        db: AsyncSession,
+        discord_id: str
+    ) -> Dict[str, Any]:
+        """Calculates rich streak analytics, 7-day visual activity calendar, freeze shields, and next milestone."""
+        today_dt = datetime.now(timezone.utc).date()
+        today_str = today_dt.strftime("%Y-%m-%d")
+
+        stmt = select(StudyStreak).where(StudyStreak.discord_id == discord_id)
+        streak = (await db.execute(stmt)).scalar_one_or_none()
+
+        if not streak:
+            streak = StudyStreak(
+                discord_id=discord_id,
+                current_streak=0,
+                longest_streak=0,
+                last_study_date=None,
+                total_days_studied=0,
+                freeze_count=2
+            )
+            db.add(streak)
+            await db.flush()
+
+        # Check if candidate studied today or yesterday
+        studied_today = (streak.last_study_date == today_str)
+        studied_yesterday = False
+        if streak.last_study_date:
+            try:
+                last_dt = datetime.strptime(streak.last_study_date, "%Y-%m-%d").date()
+                if (today_dt - last_dt).days == 1:
+                    studied_yesterday = True
+            except Exception:
+                pass
+
+        # Determine effective current streak
+        effective_streak = streak.current_streak
+        if streak.last_study_date and not studied_today and not studied_yesterday:
+            effective_streak = 0
+
+        if studied_today:
+            status_tag = "ACTIVE_SAFE"
+            status_desc = "✅ Streak Active & Secured Today!"
+        elif studied_yesterday or effective_streak > 0:
+            status_tag = "AT_RISK"
+            status_desc = "⚠️ Flame At Risk! Log today before midnight."
+        else:
+            status_tag = "INACTIVE"
+            status_desc = "💤 Inactive. Log a session to ignite your streak!"
+
+        # Query past 7 days activity
+        seven_days_ago = (today_dt - timedelta(days=6)).strftime("%Y-%m-%d")
+        sess_stmt = select(DailyStudySession.session_date).where(
+            DailyStudySession.discord_id == discord_id,
+            DailyStudySession.session_date >= seven_days_ago
+        ).distinct()
+        active_dates = set((await db.execute(sess_stmt)).scalars().all())
+
+        activity_7d = []
+        for i in range(6, -1, -1):
+            day_dt = today_dt - timedelta(days=i)
+            day_str = day_dt.strftime("%Y-%m-%d")
+            day_name = day_dt.strftime("%a")
+            activity_7d.append({
+                "date": day_str,
+                "day_name": day_name,
+                "is_today": (day_dt == today_dt),
+                "is_active": (day_str in active_dates) or (is_today := (day_dt == today_dt) and studied_today)
+            })
+
+        # Calculate next milestone
+        milestones = [3, 7, 14, 30, 50, 100, 200, 365]
+        next_milestone = None
+        for m in milestones:
+            if effective_streak < m:
+                next_milestone = m
+                break
+        if next_milestone is None:
+            next_milestone = effective_streak + 50
+
+        days_to_milestone = max(0, next_milestone - effective_streak)
+        progress_pct = int((effective_streak / next_milestone) * 100) if next_milestone > 0 else 100
+
+        return {
+            "discord_id": discord_id,
+            "current_streak": effective_streak,
+            "longest_streak": streak.longest_streak,
+            "total_days_studied": streak.total_days_studied,
+            "freeze_count": streak.freeze_count if streak.freeze_count is not None else 2,
+            "last_study_date": streak.last_study_date,
+            "studied_today": studied_today,
+            "status_tag": status_tag,
+            "status_desc": status_desc,
+            "activity_7d": activity_7d,
+            "next_milestone": next_milestone,
+            "days_to_milestone": days_to_milestone,
+            "progress_pct": min(100, progress_pct)
+        }
+
+    async def use_streak_freeze(
+        self,
+        db: AsyncSession,
+        discord_id: str
+    ) -> Dict[str, Any]:
+        """Consumes 1 streak freeze shield to protect the candidate's streak for today."""
+        today_dt = datetime.now(timezone.utc).date()
+        today_str = today_dt.strftime("%Y-%m-%d")
+
+        stmt = select(StudyStreak).where(StudyStreak.discord_id == discord_id)
+        streak = (await db.execute(stmt)).scalar_one_or_none()
+
+        if not streak or (streak.current_streak == 0 and streak.total_days_studied == 0):
+            raise ValueError("You don't have an active study streak to freeze yet! Start with `/study log`.")
+
+        freeze_available = streak.freeze_count if streak.freeze_count is not None else 2
+        if freeze_available <= 0:
+            raise ValueError("You have 0 streak freeze shields remaining! Earn more shields by reaching 7-day and 14-day study streaks.")
+
+        if streak.last_study_date == today_str:
+            raise ValueError("You have already studied today! Your streak is 100% active and safe, so no freeze shield is needed.")
+
+        streak.freeze_count = freeze_available - 1
+        streak.last_study_date = today_str # Protect streak for today
+        await db.commit()
+
+        return {
+            "success": True,
+            "current_streak": streak.current_streak,
+            "remaining_freezes": streak.freeze_count,
+            "protected_date": today_str
+        }
 
     async def get_user_notes(
         self,

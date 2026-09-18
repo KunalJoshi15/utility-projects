@@ -13,10 +13,11 @@ from bot.ui.embeds import (
     create_profile_embed,
     create_session_logs_embed,
     create_session_deleted_embed,
-    create_export_ready_embed
+    create_export_ready_embed,
+    create_streak_detail_embed
 )
 from bot.ui.modals import QuickLogModal, EditLogModal
-from bot.ui.views import ConfirmResetView, SessionLogsPaginationView
+from bot.ui.views import ConfirmResetView, SessionLogsPaginationView, StreakDashboardView
 
 logger = logging.getLogger(__name__)
 
@@ -241,29 +242,20 @@ class StudyCog(commands.GroupCog, group_name="study"):
 
     @app_commands.command(
         name="streak",
-        description="View your active daily study streak and consistency stats"
+        description="View your active daily study streak, 7-day consistency calendar & shields"
     )
-    async def view_streak(self, interaction: discord.Interaction):
+    @app_commands.describe(user="View another candidate's study streak (optional)")
+    async def view_streak(self, interaction: discord.Interaction, user: Optional[discord.User] = None):
         await interaction.response.defer(ephemeral=False)
+        target_user = user or interaction.user
+        display_name = target_user.display_name or target_user.name
+
         async with get_db() as db:
-            summary = await topic_service.get_user_profile_summary(db, str(interaction.user.id))
+            streak_details = await topic_service.get_user_streak_details(db, str(target_user.id))
 
-        streak = summary["streak"]
-        longest = summary["longest_streak"]
-        total_days = summary["total_days_studied"]
-
-        embed = discord.Embed(
-            title=f"🔥 Daily Study Streak: {interaction.user.display_name}",
-            description=(
-                f"**Current Streak:** 🔥 `{streak} Days`\n"
-                f"**Personal Best:** 🏆 `{longest} Days`\n"
-                f"**Total Days Studied:** 📅 `{total_days} Days`\n\n"
-                f"{'🎉 You have already studied today! Keep up the momentum!' if streak > 0 else '⚠️ You have not logged any study activity today! Use `/study log` to start your streak.'}"
-            ),
-            color=0xF1C40F if streak > 0 else 0xE74C3C
-        )
-        embed.set_footer(text="Consistency beats talent • Log daily with /study log")
-        await interaction.followup.send(embed=embed)
+        embed = create_streak_detail_embed(streak_details, display_name)
+        view = StreakDashboardView(str(target_user.id), display_name) if target_user.id == interaction.user.id else None
+        await interaction.followup.send(embed=embed, view=view)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(StudyCog(bot))

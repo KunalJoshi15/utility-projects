@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 INITIAL_EXTENSIONS = [
     "bot.cogs.study_cog",
     "bot.cogs.session_cog",
+    "bot.cogs.streak_cog",
     "bot.cogs.notes_cog",
     "bot.cogs.leaderboard_cog",
     "bot.cogs.roast_cog",

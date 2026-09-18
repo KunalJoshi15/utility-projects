@@ -257,3 +257,51 @@ class SessionLogsPaginationView(discord.ui.View):
         )
         await interaction.edit_original_response(embed=embed, view=self)
 
+
+class StreakDashboardView(discord.ui.View):
+    """Interactive control panel on the streak card for freeze activation and leaderboards."""
+
+    def __init__(self, discord_id: str, display_name: str):
+        super().__init__(timeout=180)
+        self.discord_id = discord_id
+        self.display_name = display_name
+
+    @discord.ui.button(label="🛡️ Use Streak Freeze", style=discord.ButtonStyle.secondary, custom_id="streak_btn_freeze")
+    async def btn_freeze(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != str(self.discord_id):
+            await interaction.response.send_message("❌ This is not your streak dashboard!", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        from bot.ui.embeds import create_freeze_activated_embed
+
+        async with get_db() as db:
+            try:
+                res = await topic_service.use_streak_freeze(db=db, discord_id=self.discord_id)
+            except ValueError as e:
+                await interaction.followup.send(f"❌ {e}", ephemeral=True)
+                return
+
+        embed = create_freeze_activated_embed(res, self.display_name)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="🏆 Streak Leaderboard", style=discord.ButtonStyle.primary, custom_id="streak_btn_lb")
+    async def btn_leaderboard(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        from services.gamification_service import gamification_service
+        from bot.ui.embeds import create_leaderboard_embed
+
+        async with get_db() as db:
+            lb_data = await gamification_service.get_leaderboard(db, sort_by="streak")
+
+        embed = create_leaderboard_embed(lb_data, category="streak")
+        view = LeaderboardView(current_category="streak")
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="⚡ Quick Log", style=discord.ButtonStyle.success, custom_id="streak_btn_quicklog")
+    async def btn_quicklog(self, interaction: discord.Interaction, button: discord.ui.Button):
+        from bot.ui.modals import QuickLogModal
+        modal = QuickLogModal()
+        await interaction.response.send_modal(modal)
+
+

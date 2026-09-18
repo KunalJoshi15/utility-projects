@@ -488,12 +488,119 @@ def create_export_ready_embed(summary: Dict[str, Any], display_name: str) -> dis
     embed.set_footer(text="Excel workbook generated with openpyxl • Open with Excel, Google Sheets, or LibreOffice")
     return embed
 
+def create_streak_detail_embed(streak_data: Dict[str, Any], display_name: str) -> discord.Embed:
+    """Format rich, gamified study streak visualizer and consistency scorecard."""
+    current = streak_data.get("current_streak", 0)
+    longest = streak_data.get("longest_streak", 0)
+    total_days = streak_data.get("total_days_studied", 0)
+    freezes = streak_data.get("freeze_count", 0)
+    studied_today = streak_data.get("studied_today", False)
+    activity_7d = streak_data.get("activity_7d", [])
+    next_m = streak_data.get("next_milestone", 7)
+    days_left = streak_data.get("days_to_milestone", 7)
+    pct = streak_data.get("progress_pct", 0)
+
+    # Theme Color based on status
+    if studied_today:
+        color = 0xF1C40F # Golden Flame
+        status_line = "🔥 **Flame Secured!** You have logged study activity today. Great discipline!"
+    elif current > 0:
+        color = 0xE67E22 # Orange Alert
+        status_line = "⚠️ **Flame At Risk!** You haven't logged today. Study & run `/study log` or `/streak freeze` to protect it!"
+    else:
+        color = 0x95A5A6 # Grey / Cold
+        status_line = "❄️ **Streak Inactive.** Run `/study log` or `/session start` to ignite your daily flame!"
+
+    embed = discord.Embed(
+        title=f"🔥 Daily Study Streak & Consistency: {display_name}",
+        description=(
+            f"{status_line}\n\n"
+            f"• **Current Streak:** 🔥 **`{current} Days`**\n"
+            f"• **Personal Best Streak:** 🏆 **`{longest} Days`**\n"
+            f"• **Total Active Study Days:** 📅 **`{total_days} Days`**\n"
+            f"• **Streak Shields / Freezes:** 🛡️ **`{freezes} Shields Available`**"
+        ),
+        color=color
+    )
+
+    # 1. Visual 7-Day Activity Calendar
+    if activity_7d:
+        day_headers = "   ".join([f"{a['day_name']}" for a in activity_7d])
+        day_icons = "    ".join(["🔥" if a["is_active"] else ("⏳" if a["is_today"] else "⬜") for a in activity_7d])
+        embed.add_field(
+            name="📅 7-Day Consistency Tracker",
+            value=f"```\n{day_headers}\n{day_icons}\n```\n*(🔥 = Studied • ⏳ = Today • ⬜ = Rest Day)*",
+            inline=False
+        )
+
+    # 2. Next Milestone Progress
+    milestone_titles = {
+        3: "Ignition 🔥",
+        7: "Unstoppable Week 🚀 (+1 Shield)",
+        14: "Fortnight Champion 🛡️ (+1 Shield)",
+        30: "Habit Master 💎 (+1 Shield)",
+        50: "Consistency Veteran 🎖️ (+1 Shield)",
+        100: "Century Legend 👑 (+2 Shields)"
+    }
+    m_name = milestone_titles.get(next_m, f"{next_m}-Day Milestone")
+
+    embed.add_field(
+        name=f"🎯 Next Milestone: {m_name}",
+        value=(
+            f"{_progress_bar(pct)} (`{current}/{next_m} Days`)\n"
+            f"• **`{days_left} Days`** remaining to reach this milestone!"
+        ),
+        inline=False
+    )
+
+    # 3. Streak Protection & Commands
+    embed.add_field(
+        name="🛡️ Streak Protection & Commands",
+        value=(
+            "• `/streak freeze` — Consume 1 shield to protect your streak on a busy day.\n"
+            "• `/leaderboard category:streak` — See the server's top consistency champions.\n"
+            "• *Tip:* Earn bonus shields automatically at 7, 14, 30, and 50-day streaks!"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text="Consistency beats talent • Keep your flame burning daily!")
+    return embed
+
+def create_freeze_activated_embed(result: Dict[str, Any], display_name: str) -> discord.Embed:
+    """Format confirmation embed when a streak freeze shield is consumed."""
+    rem = result.get("remaining_freezes", 0)
+    streak = result.get("current_streak", 0)
+    embed = discord.Embed(
+        title="🛡️ Streak Freeze Shield Activated!",
+        description=(
+            f"**Candidate:** `{display_name}`\n\n"
+            f"✨ Your active streak of **🔥 `{streak} Days`** is safely frozen and protected for today!\n\n"
+            f"• **Remaining Shields:** 🛡️ **`{rem} Freezes`**\n"
+            f"• **Protected Date:** `{result.get('protected_date')}`\n\n"
+            "Take your rest or focus on your commitments today. Don't forget to resume studying tomorrow!"
+        ),
+        color=COLOR_AI
+    )
+    embed.set_footer(text="Streak preserved • Earn bonus shields at 7 & 14 day milestones")
+    return embed
+
 def create_help_embed() -> discord.Embed:
     """Format updated Study Tracker help guide."""
     embed = discord.Embed(
-        title="📚 Study Tracker Bot: Live Sessions, Topics, Notes & Leaderboards",
-        description="A comprehensive technical interview study assistant. Track live study sessions, log topics, manage/edit past logs, export Excel reports, climb leaderboards, and avoid getting roasted!",
+        title="📚 Study Tracker Bot: Live Sessions, Topics, Notes, Streaks & Leaderboards",
+        description="A comprehensive technical interview study assistant. Track live study sessions, log topics, protect daily streaks, export Excel reports, climb leaderboards, and avoid getting roasted!",
         color=COLOR_PRIMARY
+    )
+
+    embed.add_field(
+        name="🔥 Daily Study Streaks & Habit Building",
+        value=(
+            "• `/streak [user]` - View visual 7-day consistency calendar, shields & milestones\n"
+            "• `/streak freeze` - Activate a streak freeze shield for rest days\n"
+            "• `/streak leaderboard` - View server streak ranking champions"
+        ),
+        inline=False
     )
 
     embed.add_field(
@@ -512,8 +619,7 @@ def create_help_embed() -> discord.Embed:
         value=(
             "• `/study log <topics> [notes] [duration] [problems] [category]` - Log 1 or multiple numbered topics\n"
             "• `/study quicklog` - Interactive multi-topic and notes popup modal\n"
-            "• `/study profile [user]` - View candidate rank, badges, hours, and scorecard\n"
-            "• `/study streak` - Check your active daily study streak"
+            "• `/study profile [user]` - View candidate rank, badges, hours, and scorecard"
         ),
         inline=False
     )
@@ -557,6 +663,7 @@ def create_help_embed() -> discord.Embed:
         inline=False
     )
 
-    embed.set_footer(text="Consistency is key • Start today with /session start or /study quicklog")
+    embed.set_footer(text="Consistency is key • Start today with /streak, /session start or /study quicklog")
     return embed
+
 
