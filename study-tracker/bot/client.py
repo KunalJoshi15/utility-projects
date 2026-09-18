@@ -1,26 +1,27 @@
+from __future__ import annotations
 import logging
 import discord
 from discord.ext import commands
 from config.settings import settings
 from database.db import init_db
-
 from services.reminder_service import reminder_service
+from services.live_session_service import live_session_service
 
 logger = logging.getLogger(__name__)
 
 INITIAL_EXTENSIONS = [
     "bot.cogs.study_cog",
-    "bot.cogs.pomodoro_cog",
-    "bot.cogs.ai_coach_cog",
+    "bot.cogs.session_cog",
+    "bot.cogs.notes_cog",
     "bot.cogs.leaderboard_cog",
+    "bot.cogs.roast_cog",
     "bot.cogs.help_cog"
 ]
 
 class StudyTrackerBot(commands.Bot):
     def __init__(self):
+        # Default unprivileged intents to avoid PrivilegedIntentsRequired errors
         intents = discord.Intents.default()
-        intents.message_content = True
-        intents.members = True
 
         super().__init__(
             command_prefix="!study ",
@@ -57,10 +58,12 @@ class StudyTrackerBot(commands.Bot):
         logger.info(f"Study Tracker Bot logged in as {self.user} (ID: {self.user.id})")
         activity = discord.Activity(
             type=discord.ActivityType.watching,
-            name="Interview Prep • /study log • /help"
+            name="Live Sessions • /session start • /help"
         )
         await self.change_presence(status=discord.Status.online, activity=activity)
         
-        # Start Daily Streak & Inactivity Reminder Service
+        # Start Daily Inactivity Sarcastic Roast Service
         reminder_service.start(self)
-
+        
+        # Start Live Session Offline Watchdog
+        live_session_service.start_watchdog(self)

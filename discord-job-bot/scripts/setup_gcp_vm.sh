@@ -72,7 +72,7 @@ echo "==========================================================================
 echo "Next Steps to Launch:"
 echo "1. Place your bot files in: $PROJECT_DIR"
 echo "2. Copy your .env configuration into: $PROJECT_DIR/.env"
-echo "   (Make sure to set DISCORD_BOT_TOKEN and GEMINI_API_KEY)"
+echo "   (Make sure to set DISCORD_BOT_TOKEN and OPENROUTER_API_KEY)"
 echo "3. Start the service with: sudo systemctl start discord-job-bot"
 echo "4. View live logs with: sudo journalctl -u discord-job-bot -f"
 echo "=========================================================================="

@@ -1,506 +1,414 @@
+from __future__ import annotations
+from typing import Dict, List, Any, Optional
 import discord
-from typing import Dict, Any, List, Optional
-from database.models import StudyGoal
 
+# Colors
 COLOR_PRIMARY = 0x5865F2   # Blurple
-COLOR_SUCCESS = 0x57F287   # Green
-COLOR_WARNING = 0xFEE75C   # Yellow
-COLOR_DANGER = 0xED4245    # Red
-COLOR_FIRE = 0xE67E22      # Streak Orange / Fire
-COLOR_AI = 0x9B59B6        # AI Purple
+COLOR_SUCCESS = 0x2ECC71   # Green
+COLOR_WARNING = 0xF1C40F   # Gold / Yellow
+COLOR_DANGER  = 0xE74C3C   # Red
+COLOR_PURPLE  = 0x9B59B6   # Purple
+COLOR_AI      = 0x00D2D3   # Teal
 
 def _progress_bar(percentage: float, length: int = 10) -> str:
-    """Generate visual ASCII progress bar."""
-    clamped = max(0.0, min(100.0, percentage))
-    filled_len = int(round(length * clamped / 100))
-    bar = "█" * filled_len + "░" * (length - filled_len)
-    return f"`[{bar}]` **{clamped:.0f}%**"
+    """Renders a clean ASCII/Unicode progress bar."""
+    filled = int(round((percentage / 100.0) * length))
+    filled = max(0, min(length, filled))
+    empty = length - filled
+    return f"`[{'█' * filled}{'░' * empty}]` {percentage:.0f}%"
 
-def create_progress_embed(summary: Dict[str, Any]) -> discord.Embed:
-    """Generate comprehensive visual progress report for candidate."""
-    name = summary.get("display_name", "Candidate")
-    streak = summary.get("streak", {})
-    streak_count = streak.get("current_streak", 0)
-    streak_badge = f"🔥 `{streak_count} Day Streak`" if streak_count > 0 else "⚡ `Start Your Streak Today!`"
+def create_study_logged_embed(result: Dict[str, Any], display_name: str) -> discord.Embed:
+    """Format celebratory embed when a study session with 1 or multiple topics is logged."""
+    topics = result["extracted_topics"]
+    count = result["topics_count"]
+    notes = result.get("notes")
+    rank_info = result.get("rank_info", {})
+    did_level_up = result.get("did_level_up", False)
+    new_badges = result.get("new_badges", [])
+    streak = result.get("streak", 1)
+
+    title = f"🎉 Level Up! Promoted to {rank_info.get('title')}!" if did_level_up else f"✅ Daily Study Logged ({count} Topics)"
+    color = COLOR_WARNING if did_level_up else COLOR_SUCCESS
 
     embed = discord.Embed(
-        title=f"📊 Interview Preparation Scorecard: {name}",
+        title=title,
         description=(
-            f"**Target Role:** `{summary.get('target_role', 'Software Engineer')}` • "
-            f"**Target Companies:** `{summary.get('target_companies', 'Google, Amazon')}`\n"
-            f"**Current Status:** {streak_badge} • **Total Study Time:** `⏱️ {summary.get('total_hours', 0)} Hours` • **Problems Solved:** `🧩 {summary.get('total_problems', 0)}`"
+            f"**Candidate:** `{display_name}` • **Rank:** {rank_info.get('icon', '🥉')} **{rank_info.get('title', 'Novice')}** (Level {rank_info.get('level', 1)})\n"
+            f"**Current Streak:** 🔥 `{streak} Days Active` • **Total Topics Mastered:** `{result.get('total_topics', 0)}`\n"
+            f"**Next Rank Target:** {_progress_bar(rank_info.get('progress_pct', 0))} (`{rank_info.get('topics_left', 0)} topics left`)"
         ),
-        color=COLOR_PRIMARY
-    )
-
-    # 1. Weekly Momentum
-    weekly_hours = summary.get("weekly_hours", 0)
-    weekly_problems = summary.get("weekly_problems", 0)
-    embed.add_field(
-        name="⚡ 7-Day Momentum",
-        value=f"• **Study Time:** `{weekly_hours} hrs`\n• **Problems Solved:** `{weekly_problems}`\n• **Sessions:** `{summary.get('total_sessions', 0)} total`",
-        inline=True
-    )
-
-    # 2. Streak Stats
-    embed.add_field(
-        name="🔥 Streak & Consistency",
-        value=f"• **Active Streak:** `{streak.get('current_streak', 0)} days`\n• **Longest Streak:** `{streak.get('longest_streak', 0)} days`\n• **Total Active Days:** `{streak.get('total_days_studied', 0)}`",
-        inline=True
-    )
-
-    # 3. Categorical Breakdown
-    cats = summary.get("categories", {})
-    cat_lines = []
-    category_emojis = {
-        "DSA": "🧩",
-        "LLD": "🏗️",
-        "HLD": "🌐",
-        "CORE_CS": "💻",
-        "MOCK_INTERVIEW": "🎤",
-        "CUSTOM": "🎯"
-    }
-
-    for cat_key, data in cats.items():
-        emoji = category_emojis.get(cat_key, "📁")
-        hours = data.get("total_hours", 0)
-        probs = data.get("problems_solved", 0)
-        conf = data.get("avg_confidence", 0)
-        stars = "⭐" * int(round(conf)) if conf > 0 else "No rating"
-        cat_lines.append(f"{emoji} **{cat_key}:** `{hours} hrs` • `{probs} problems` • Confidence: {stars}")
-
-    embed.add_field(
-        name="📚 Category Breakdown",
-        value="\n".join(cat_lines),
-        inline=False
-    )
-
-    # 4. Recent Topics Logged
-    recent = summary.get("recent_topics", [])
-    if recent:
-        recent_lines = [
-            f"• `{r['date']}` **[{r['category']}]** {r['subtopic']} — `{r['minutes']}m` ({'⭐'*r['confidence']})"
-            for r in recent
-        ]
-        embed.add_field(
-            name="🕒 Recent Study Activity",
-            value="\n".join(recent_lines),
-            inline=False
-        )
-
-    embed.set_footer(text="Log new prep with /study log • Focus timer with /study timer • AI Coach with /study coach")
-    return embed
-
-def create_streak_embed(streak_data: Dict[str, Any], display_name: str) -> discord.Embed:
-    """Format daily streak card."""
-    current = streak_data.get("current_streak", 0)
-    longest = streak_data.get("longest_streak", 0)
-    total_days = streak_data.get("total_days_studied", 0)
-    studied_today = streak_data.get("studied_today", False)
-
-    status_text = "✅ **Studied Today!** Streak is safe." if studied_today else "⚠️ **Not yet studied today!** Log a session to keep your streak alive."
-    
-    embed = discord.Embed(
-        title=f"🔥 Preparation Streak: {display_name}",
-        description=f"### Current Streak: **{current} Days** 🔥\n{status_text}",
-        color=COLOR_FIRE
-    )
-    embed.add_field(name="🏆 Longest Streak", value=f"`{longest} Days`", inline=True)
-    embed.add_field(name="📅 Total Active Days", value=f"`{total_days} Days`", inline=True)
-    embed.add_field(name="🗓️ Last Studied", value=f"`{streak_data.get('last_study_date') or 'Never'}`", inline=True)
-
-    milestone = 7 if current < 7 else 14 if current < 14 else 30 if current < 30 else 100
-    progress_pct = (current / milestone) * 100.0
-    embed.add_field(
-        name=f"🎯 Next Milestone: {milestone}-Day Streak",
-        value=_progress_bar(progress_pct),
-        inline=False
-    )
-
-    embed.set_footer(text="Keep consistent! Run /study log or /study timer to log your daily progress.")
-    return embed
-
-def create_roadmap_embed(roadmap_dict: Dict[str, Any]) -> discord.Embed:
-    """Format curated roadmap card."""
-    first_key = list(roadmap_dict.keys())[0]
-    data = roadmap_dict[first_key]
-
-    embed = discord.Embed(
-        title=data.get("title", "Interview Roadmap"),
-        description=data.get("description", "Structured preparation curriculum"),
-        color=COLOR_PRIMARY
-    )
-
-    topics = data.get("topics", [])
-    for idx, t in enumerate(topics[:8], 1):
-        problems_str = " • ".join([f"`{p}`" for p in t.get("key_problems", [])[:4]])
-        embed.add_field(
-            name=f"{idx}. 📌 {t.get('name')}",
-            value=problems_str,
-            inline=False
-        )
-
-    embed.set_footer(text="Use /study log to record your progress on any of these topics!")
-    return embed
-
-def create_study_plan_embed(plan: Dict[str, Any]) -> discord.Embed:
-    """Format AI tailored weekly preparation plan."""
-    embed = discord.Embed(
-        title=f"🤖 AI Study Plan: {plan.get('target_role')} @ {plan.get('target_company')}",
-        description=f"**Duration:** `{plan.get('total_weeks', 8)} Weeks`\n{plan.get('plan_title', '')}",
-        color=COLOR_AI
-    )
-
-    for week in plan.get("weekly_breakdown", [])[:6]:
-        dsa_str = ", ".join(week.get("dsa_targets", []))
-        sys_str = ", ".join(week.get("lld_hld_targets", []))
-        desc_text = f"• **DSA:** `{dsa_str}`\n• **LLD/HLD:** `{sys_str}`\n• 🎯 **Goal:** *{week.get('milestone_goal')}*"
-        embed.add_field(
-            name=f"🗓️ Week {week.get('week_number')}: {week.get('focus_area')}",
-            value=desc_text,
-            inline=False
-        )
-
-    tips = plan.get("key_success_tips", [])
-    if tips:
-        embed.add_field(
-            name="💡 Principal Engineer Tips",
-            value="\n".join([f"• {t}" for t in tips[:3]]),
-            inline=False
-        )
-
-    embed.set_footer(text="Generated by Google Gemini AI • Track your milestones with /study goals")
-    return embed
-
-def create_quiz_embed(quiz: Dict[str, Any]) -> discord.Embed:
-    """Format AI technical interview quiz question."""
-    embed = discord.Embed(
-        title=f"🧠 Mock Interview Quiz: {quiz.get('topic')}",
-        description=f"**Category:** `{quiz.get('category')}` • **Difficulty:** `{quiz.get('difficulty')}`\n\n"
-                    f"### ❓ Question:\n**{quiz.get('question')}**",
-        color=COLOR_AI
-    )
-    hints = quiz.get("hints", [])
-    if hints:
-        embed.add_field(name="💡 Hint", value="\n".join([f"• {h}" for h in hints]), inline=False)
-
-    embed.set_footer(text="Click 'Submit Answer' below to have Gemini AI evaluate your response!")
-    return embed
-
-def create_quiz_evaluation_embed(eval_data: Dict[str, Any], user_answer: str) -> discord.Embed:
-    """Format AI quiz scorecard."""
-    score = eval_data.get("score", 75)
-    color = COLOR_SUCCESS if score >= 80 else COLOR_WARNING if score >= 60 else COLOR_DANGER
-
-    embed = discord.Embed(
-        title=f"📝 Interview Answer Evaluation (Score: {score}/100)",
-        description=f"**Verdict:** **{eval_data.get('verdict', 'Evaluation Complete')}**\n\n"
-                    f"**Your Answer:** *\"{user_answer[:200]}...\"*",
         color=color
     )
 
-    strengths = eval_data.get("strengths", [])
-    if strengths:
-        embed.add_field(name="✅ What You Did Well", value="\n".join([f"• {s}" for s in strengths]), inline=False)
+    # 1. Extracted Topics Field
+    topic_lines = []
+    for idx, t in enumerate(topics, 1):
+        topic_lines.append(f"`{idx}.` **{t}**")
+    
+    topics_value = "\n".join(topic_lines)
+    if len(topics_value) > 1000:
+        topics_value = topics_value[:980] + "\n*(more topics...)*"
 
-    missed = eval_data.get("missed_points", [])
-    if missed:
-        embed.add_field(name="⚠️ Missing Points / Blindspots", value="\n".join([f"• {m}" for m in missed]), inline=False)
-
-    model_ans = eval_data.get("expert_model_answer")
-    if model_ans:
-        embed.add_field(name="💡 Ideal Staff Engineer Answer", value=model_ans, inline=False)
-
-    takeaway = eval_data.get("actionable_takeaway")
-    if takeaway:
-        embed.add_field(name="🚀 Actionable Takeaway", value=f"• {takeaway}", inline=False)
-
-    embed.set_footer(text="Evaluated with Gemini AI • Practice more with /study quiz")
-    return embed
-
-def create_revision_embed(queue: List[Dict[str, Any]]) -> discord.Embed:
-    """Format Spaced Repetition revision queue."""
-    embed = discord.Embed(
-        title="🔄 Spaced Repetition: Topics to Revise Today",
-        description="Topics you recently studied with lower confidence scores or older completion dates:",
-        color=COLOR_WARNING
+    embed.add_field(
+        name=f"📚 Topics Covered Today ({count} total)",
+        value=topics_value,
+        inline=False
     )
-    if not queue:
-        embed.description = "🎉 **All caught up!** You have no overdue topics with low confidence."
-        return embed
 
-    for item in queue:
-        stars = "⭐" * item["last_confidence"]
+    # 2. Attached Notes & Takeaways
+    if notes:
+        notes_val = notes if len(notes) <= 1000 else notes[:980] + "..."
         embed.add_field(
-            name=f"{item['urgency']} [{item['category']}] {item['subtopic']}",
-            value=f"• **Confidence:** {stars} (`{item['last_confidence']}/5`)\n• **Last Studied:** `{item['days_since']} days ago`",
+            name="📝 Attached Study Notes & Takeaways",
+            value=f"```markdown\n{notes_val}\n```",
             inline=False
         )
 
-    embed.set_footer(text="Run /study log after revising to update your confidence score!")
-    return embed
-
-def create_leaderboard_embed(board: List[Dict[str, Any]]) -> discord.Embed:
-    """Format server study champion leaderboard."""
-    embed = discord.Embed(
-        title="🏆 Server Interview Preparation Leaderboard",
-        description="Top preparation champions ranked by study time & problems solved:",
-        color=COLOR_SUCCESS
+    # 3. Session Statistics
+    duration_str = f"`{result.get('duration_minutes', 45)} mins`"
+    probs_str = f"`{result.get('problems_solved', 0)} problems`"
+    embed.add_field(
+        name="⏱️ Session Details",
+        value=f"• **Duration:** {duration_str}\n• **Problems Solved:** {probs_str}\n• **Category:** `{result.get('category', 'General')}`",
+        inline=True
     )
 
-    if not board:
-        embed.description = "ℹ️ No study logs found yet in this server. Start tracking with `/study log`!"
+    # 4. Badges Unlocked
+    if new_badges:
+        badge_text = "\n".join([f"• {b.icon} **{b.title}**: *{b.description}*" for b in new_badges])
+        embed.add_field(
+            name="🏆 New Achievements Unlocked!",
+            value=badge_text[:1000],
+            inline=False
+        )
+
+    embed.set_footer(text="View all your past notes with /notes • Check server leaderboard with /leaderboard")
+    return embed
+
+def create_notes_list_embed(
+    notes_list: List[Dict[str, Any]],
+    total_count: int,
+    page: int,
+    query: Optional[str],
+    display_name: str
+) -> discord.Embed:
+    """Format paginated study notes and revision takeaways."""
+    header_query = f" matching *'{query}'*" if query else ""
+    embed = discord.Embed(
+        title=f"📝 Study Notes & Takeaways: {display_name}{header_query}",
+        description=f"Showing **{len(notes_list)}** of **{total_count}** logged note entries (Page {page + 1}):",
+        color=COLOR_PRIMARY
+    )
+
+    if not notes_list:
+        embed.description = f"ℹ️ No notes found{header_query}.\nLog what you study and attach notes using `/study log topics:\"...\" notes:\"...\"` or `/study quicklog`!"
+        return embed
+
+    for idx, item in enumerate(notes_list, 1):
+        topics_str = ", ".join(item.get("topics", [])) or "General Session"
+        notes_text = item.get("notes", "")
+        if len(notes_text) > 400:
+            notes_text = notes_text[:390] + "..."
+
+        date_str = item.get("date", "Unknown Date")
+        cat_str = item.get("category", "General")
+
+        embed.add_field(
+            name=f"🗓️ {date_str} [{cat_str}] — {topics_str[:180]}",
+            value=f"```markdown\n{notes_text}\n```",
+            inline=False
+        )
+
+    embed.set_footer(text="Search notes with /notes query:\"keyword\" • Quick log with /study quicklog")
+    return embed
+
+def create_topics_list_embed(
+    topics_list: List[Any],
+    total_count: int,
+    display_name: str,
+    rank_info: Dict[str, Any]
+) -> discord.Embed:
+    """Format complete topics checklist for a candidate."""
+    embed = discord.Embed(
+        title=f"📋 Mastered Topics Checklist: {display_name}",
+        description=(
+            f"**Candidate Rank:** {rank_info.get('icon', '🥉')} **{rank_info.get('title', 'Novice')}** (Level {rank_info.get('level', 1)})\n"
+            f"**Total Technical Topics Covered:** `{total_count}`\n"
+            f"**Rank Progress:** {_progress_bar(rank_info.get('progress_pct', 0))} (`{rank_info.get('topics_left', 0)} topics to next rank`)"
+        ),
+        color=COLOR_PRIMARY
+    )
+
+    if not topics_list:
+        embed.description += "\n\nℹ️ You have not logged any topics yet. Run `/study log` or `/study quicklog` to start!"
+        return embed
+
+    topic_lines = []
+    current_len = 0
+    for idx, t in enumerate(topics_list, 1):
+        line = f"`{idx}.` **{t.topic_name}** `[{t.category}]` *({t.logged_date})*"
+        if current_len + len(line) + 60 > 920:
+            break
+        topic_lines.append(line)
+        current_len += len(line) + 1
+
+    remaining = total_count - len(topic_lines)
+    if remaining > 0:
+        topic_lines.append(f"*(... and `{remaining}` more topics in your history)*")
+
+    embed.add_field(
+        name=f"📚 Topics History ({len(topic_lines) if remaining <= 0 else len(topic_lines) - 1}/{total_count} shown)",
+        value="\n".join(topic_lines),
+        inline=False
+    )
+
+    embed.set_footer(text="Log multiple topics with numbers (e.g. 1. Topic A 2. Topic B) in /study log")
+    return embed
+
+def create_leaderboard_embed(leaderboard_data: List[Dict[str, Any]], category: str = "topics") -> discord.Embed:
+    """Format high-impact server preparation leaderboard."""
+    cat_titles = {
+        "topics": ("📚 Top Technical Topics Mastered", "Ranked by total distinct technical topics covered:"),
+        "streak": ("🔥 Longest Active Study Streaks", "Ranked by consecutive daily study streaks:"),
+        "hours":  ("⏱️ Most Dedicated Study Hours", "Ranked by total study time logged:")
+    }
+    title, desc = cat_titles.get(category, ("🏆 Server Study Leaderboard", "Preparation champions:"))
+
+    embed = discord.Embed(
+        title=title,
+        description=desc,
+        color=COLOR_WARNING
+    )
+
+    if not leaderboard_data:
+        embed.description = "ℹ️ No study data logged on this server yet.\nBe the first on the leaderboard with `/study log` or `/study quicklog`!"
         return embed
 
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-    for idx, user in enumerate(board):
+
+    for idx, user in enumerate(leaderboard_data):
         medal = medals[idx] if idx < len(medals) else f"`#{idx+1}`"
+        rank_badge = f"{user.get('rank_icon', '🥉')} `{user.get('rank_title', 'Novice')}`"
+
         embed.add_field(
-            name=f"{medal} {user['name']}",
-            value=f"⏱️ `{user['total_hours']} hrs` • 🧩 `{user['total_problems']} solved` • 🔥 `{user['streak_days']}d streak`",
+            name=f"{medal} {user['username']} — {rank_badge}",
+            value=f"• **Score:** **{user['value_primary']}** ({user['value_secondary']})",
             inline=False
         )
 
-    embed.set_footer(text="Log your daily study sessions with /study log to climb the leaderboard!")
+    embed.set_footer(text="Use buttons below to switch leaderboard views • Log daily to rank up!")
     return embed
 
-def create_pomodoro_embed(session_data: Dict[str, Any]) -> discord.Embed:
-    """Format active Pomodoro timer embed."""
+def create_profile_embed(summary: Dict[str, Any], display_name: str) -> discord.Embed:
+    """Format full candidate scorecard and achievement profile."""
+    prof = summary["profile"]
+    rank_info = summary["rank_info"]
+    streak = summary["streak"]
+    badges = summary.get("badges", [])
+
     embed = discord.Embed(
-        title="⏱️ Focus Study Session (Pomodoro)",
+        title=f"👤 Candidate Study Scorecard: {display_name}",
         description=(
-            f"**Task:** `{session_data['task']}`\n"
-            f"**Category:** `{session_data['category']}`\n"
-            f"**Duration:** `{session_data['duration_minutes']} Minutes`\n\n"
-            f"🎯 Put your phone away, eliminate distractions, and focus on the task!\n"
-            f"When done, click **'Complete & Log Session'** below."
-        ),
-        color=COLOR_PRIMARY
-    )
-    embed.set_footer(text="Pomodoro Focus Timer • Study Tracker Bot")
-    return embed
-
-def create_resources_embed(resources: List[Dict[str, Any]], category: Optional[str] = None) -> discord.Embed:
-    """Format curated and community preparation resources embed."""
-    cat_title = f" ({category.upper()})" if category else ""
-    embed = discord.Embed(
-        title=f"📚 Interview & Prep Learning Resources{cat_title}",
-        description="Curated documentation, interactive tutorials, architecture blueprints & practice sets:",
-        color=COLOR_SUCCESS
-    )
-
-    if not resources:
-        embed.description = "ℹ️ No resources found for this filter. Add one with `/study resource_add`!"
-        return embed
-
-    type_emojis = {
-        "DOCUMENTATION": "📖",
-        "ARTICLE": "📝",
-        "PRACTICE": "🧩",
-        "CHEATSHEET": "⚡",
-        "REPO": "🐙",
-        "VIDEO": "🎥",
-        "BOOK": "📕"
-    }
-
-    for idx, r in enumerate(resources[:10], 1):
-        emoji = type_emojis.get(r.get("type", "").upper(), "🔗")
-        field_value = (
-            f"• **Type:** `{r.get('type')}` • **Added By:** `{r.get('added_by')}` • 👍 `{r.get('upvotes', 1)}`\n"
-            f"• {r.get('description', '')}\n"
-            f"• **[👉 Click Here to Open Resource]({r.get('url')})**"
-        )
-        embed.add_field(
-            name=f"{idx}. {emoji} {r.get('title')} ({r.get('category')})",
-            value=field_value,
-            inline=False
-        )
-
-    embed.set_footer(text="Add your own favorite resources with /study resource_add or /study resource_modal")
-    return embed
-
-def create_schedule_embed(plan_obj: Any, display_name: str) -> discord.Embed:
-    """Format candidate target exit schedule card."""
-    import json
-    data = {}
-    if hasattr(plan_obj, "schedule_json") and plan_obj.schedule_json:
-        try:
-            data = json.loads(plan_obj.schedule_json)
-        except Exception:
-            data = {}
-
-    exit_target = getattr(plan_obj, "target_exit_date", "Target Date") or "Upcoming"
-    title = getattr(plan_obj, "title", "Career Exit Study Schedule")
-
-    embed = discord.Embed(
-        title=f"📅 {title}",
-        description=(
-            f"**Candidate:** `{display_name}` • **Target Exit Timeline:** `🎯 {exit_target}`\n"
-            f"**Daily Slots:** `{getattr(plan_obj, 'daily_slots', 'Morning & Evening')}`\n"
-            f"**Clones/Forks:** `👥 {getattr(plan_obj, 'clones_count', 0)}`"
+            f"**Current Rank:** {rank_info.get('icon', '🥉')} **{rank_info.get('title')}** (Level {rank_info.get('level', 1)})\n"
+            f"**Rank Progress:** {_progress_bar(rank_info.get('progress_pct', 0))} (`{rank_info.get('topics_left', 0)} topics to next rank`)\n"
+            f"**Target Role:** `{prof.target_role or 'Software Engineer'}` • **Dream Companies:** `{prof.target_companies or 'FAANG'}`"
         ),
         color=COLOR_PRIMARY
     )
 
-    # Daily Time Slots
-    slots = data.get("daily_time_slots", [])
-    if slots:
-        slot_lines = [f"• **{s.get('slot_name', 'Slot')}:** `{s.get('time')}` — *{s.get('purpose')}*" for s in slots]
-        embed.add_field(name="⏰ Daily Routine Time Slots", value="\n".join(slot_lines), inline=False)
+    # 1. Metrics Grid
+    embed.add_field(
+        name="📊 Preparation Metrics",
+        value=(
+            f"• **Topics Mastered:** `{summary.get('total_topics', 0)}`\n"
+            f"• **Total Study Time:** `{summary.get('total_hours', 0)} Hours`\n"
+            f"• **Problems Solved:** `{summary.get('total_problems', 0)}`"
+        ),
+        inline=True
+    )
 
-    # Weekly Milestones Breakdown
-    milestones = data.get("weekly_milestones", [])
-    for m in milestones[:5]:
-        val = (
-            f"• **Morning Slot:** {m.get('morning_focus')}\n"
-            f"• **Evening Slot:** {m.get('evening_focus')}\n"
-            f"• 🎯 **Milestone Deliverable:** *{m.get('weekly_deliverable')}*"
-        )
+    # 2. Streak Metrics
+    embed.add_field(
+        name="🔥 Streak & Discipline",
+        value=(
+            f"• **Active Streak:** `{streak} Days`\n"
+            f"• **Best Streak:** `{summary.get('longest_streak', 0)} Days`\n"
+            f"• **Total Active Days:** `{summary.get('total_days_studied', 0)} Days`"
+        ),
+        inline=True
+    )
+
+    # 3. Badges Unlocked
+    if badges:
+        badge_text = " ".join([f"{b.icon} **{b.title}**" for b in badges[:8]])
         embed.add_field(
-            name=f"🗓️ Week {m.get('week_num')}: {m.get('phase_title')}",
-            value=val,
+            name=f"🏆 Badges Earned ({len(badges)})",
+            value=badge_text[:1000],
             inline=False
         )
 
-    # Exit Readiness Checklist
-    checklist = data.get("exit_readiness_checklist", [])
-    if checklist:
-        embed.add_field(
-            name="🏁 Pre-Resignation Exit Readiness Checklist",
-            value="\n".join([f"• [ ] {c}" for c in checklist[:4]]),
-            inline=False
-        )
-
-    embed.set_footer(text="Adjust schedule anytime with /study schedule_adjust • Fork with /study schedule_clone")
+    embed.set_footer(text="Log multiple topics with /study log • Review notes with /notes")
     return embed
 
-def create_shared_schedules_embed(schedules: List[Any]) -> discord.Embed:
-    """Format community-shared study plans list."""
+def create_roast_embed(roast_text: str, slacker_name: str) -> discord.Embed:
+    """Format hilarious sarcastic roast embed for Discord channels or DMs."""
     embed = discord.Embed(
-        title="🌐 Community Preparation Schedules & Roadmaps",
-        description="Browse, learn from, or clone/fork fellow candidates' study routines:",
+        title="🔥 Daily Slacker Roast Alert! 🔥",
+        description=roast_text,
+        color=0xFF4757 # Sizzling crimson
+    )
+    embed.add_field(
+        name="⚡ How to redeem yourself:",
+        value=f"Run `/study log topics:\"...\"` right now, **{slacker_name}**, before the server catches on!",
+        inline=False
+    )
+    embed.set_footer(text="Sarcasm is the highest form of motivation • Powered by Study Tracker")
+    return embed
+
+def create_live_session_started_embed(session: Any, display_name: str) -> discord.Embed:
+    """Format real-time live study session start panel."""
+    start_ts = int(session.start_time.timestamp()) if hasattr(session.start_time, 'timestamp') else 0
+    embed = discord.Embed(
+        title="🟢 Live Study Session Active",
+        description=(
+            f"**Candidate:** `{display_name}`\n"
+            f"**Current Topic / Goal:** 🎯 **{session.topic_or_goal}**\n"
+            f"**Category:** `{session.category}`\n"
+            f"**Started:** <t:{start_ts}:t> (<t:{start_ts}:R>)\n\n"
+            f"💡 **Session Rules:**\n"
+            f"• Click **`⏹️ End Study Session`** below or run `/session stop` when finished.\n"
+            f"• 🔌 **Offline Auto-Stop:** If your Discord status changes to **Offline**, your session will automatically save and conclude!"
+        ),
         color=COLOR_SUCCESS
     )
-
-    if not schedules:
-        embed.description = "ℹ️ No public schedules found. Generate yours with `/study schedule`!"
-        return embed
-
-    for idx, s in enumerate(schedules[:8], 1):
-        field_value = (
-            f"• **Author:** `{s.author_name}` • **Exit Target:** `{s.target_exit_date}` • 👥 `{s.clones_count} Forks`\n"
-            f"• **Slots:** `{s.daily_slots}`\n"
-            f"• 📋 **Clone into your profile:** `/study schedule_clone schedule_id:{s.id}`"
-        )
-        embed.add_field(
-            name=f"{idx}. 📌 {s.title} (ID #{s.id})",
-            value=field_value,
-            inline=False
-        )
-
-    embed.set_footer(text="Clone any schedule with /study schedule_clone <id>")
+    embed.set_footer(text="Stay focused! Your elapsed minutes are being tracked in real time.")
     return embed
 
-def create_topic_checklist_embed(topics: List[Any], category: Optional[str] = None, display_name: str = "Candidate") -> discord.Embed:
-    """Format user checklist of roadmap topics."""
-    import json
-    cat_title = f" ({category.upper()})" if category else ""
+def create_live_session_ended_embed(result: Dict[str, Any], display_name: str) -> discord.Embed:
+    """Format live session completion summary receipt."""
+    duration_mins = result.get("live_duration_minutes", 1)
+    topics = result.get("extracted_topics", [])
+    rank_info = result.get("rank_info", {})
+    did_level_up = result.get("did_level_up", False)
+    new_badges = result.get("new_badges", [])
+    streak = result.get("streak", 1)
+
+    title = f"🎉 Level Up! Promoted to {rank_info.get('title')}!" if did_level_up else "🏁 Live Study Session Concluded"
+    color = COLOR_WARNING if did_level_up else COLOR_SUCCESS
+
     embed = discord.Embed(
-        title=f"📋 Topic Checklist & Syllabus Tracker: {display_name}{cat_title}",
-        description="Track and check off your preparation syllabus topics:",
-        color=COLOR_PRIMARY
+        title=title,
+        description=(
+            f"**Great work, `{display_name}`!** Here is your session breakdown:\n\n"
+            f"• ⏱️ **Active Duration Logged:** **`{duration_mins} Minutes`**\n"
+            f"• 🔥 **Updated Streak:** **`{streak} Days Active`**\n"
+            f"• 🏆 **Current Rank:** {rank_info.get('icon', '🥉')} **{rank_info.get('title', 'Novice')}** (Level {rank_info.get('level', 1)})\n"
+            f"• 📚 **Total Topics Mastered:** `{result.get('total_topics', 0)}`"
+        ),
+        color=color
     )
 
-    if not topics:
-        embed.description = "ℹ️ No topics found in your checklist. Import syllabus files with `/study import_plan`!"
-        return embed
-
-    completed_count = sum(1 for t in topics if t.status == "COMPLETED")
-    in_prog_count = sum(1 for t in topics if t.status == "IN_PROGRESS")
-    total_count = len(topics)
-    pct = (completed_count / total_count) * 100.0 if total_count > 0 else 0
-
-    embed.description = f"**Status:** `{completed_count}/{total_count} Completed` ({pct:.0f}%) • `{in_prog_count} In Progress`"
-
-    status_icons = {
-        "COMPLETED": "✅ `[COMPLETED]`",
-        "IN_PROGRESS": "🔄 `[IN PROGRESS]`",
-        "TODO": "⬜ `[TODO]`"
-    }
-
-    for idx, t in enumerate(topics[:12], 1):
-        icon = status_icons.get(t.status, "⬜")
-        sub_list = []
-        if t.subtopics:
-            try:
-                parsed_subs = json.loads(t.subtopics)
-                if isinstance(parsed_subs, list):
-                    sub_list = parsed_subs[:3]
-            except Exception:
-                pass
-        subs_text = f" — *{', '.join(sub_list)}*" if sub_list else ""
+    if topics:
+        topic_lines = [f"`{i}.` **{t}**" for i, t in enumerate(topics, 1)]
         embed.add_field(
-            name=f"{idx}. {icon} [{t.category}] {t.topic_name}",
-            value=f"• Toggle status: `/study topic_toggle topic_name:\"{t.topic_name}\"`{subs_text}",
+            name="🎯 Topics Mastered",
+            value="\n".join(topic_lines)[:1000],
             inline=False
         )
 
-    embed.set_footer(text="Import new topic files with /study import_plan • View graph with /study chart")
+    if result.get("notes"):
+        embed.add_field(
+            name="📝 Attached Session Notes",
+            value=f"```markdown\n{result['notes'][:950]}\n```",
+            inline=False
+        )
+
+    if new_badges:
+        badge_text = "\n".join([f"• {b.icon} **{b.title}**: *{b.description}*" for b in new_badges])
+        embed.add_field(
+            name="🏆 New Badges Unlocked!",
+            value=badge_text[:1000],
+            inline=False
+        )
+
+    embed.set_footer(text="Start another session anytime with /session start • Check notes with /notes")
+    return embed
+
+def create_live_session_status_embed(session: Any, display_name: str) -> discord.Embed:
+    """Format live session status check."""
+    start_ts = int(session.start_time.timestamp()) if hasattr(session.start_time, 'timestamp') else 0
+    embed = discord.Embed(
+        title="⏱️ Active Study Session Status",
+        description=(
+            f"**Candidate:** `{display_name}`\n"
+            f"**Topic / Goal:** **{session.topic_or_goal}**\n"
+            f"**Category:** `{session.category}`\n"
+            f"**Session Started:** <t:{start_ts}:T> (<t:{start_ts}:R>)\n"
+            f"**Status:** 🟢 Live & Tracking (Auto-stops if you go offline)"
+        ),
+        color=COLOR_PRIMARY
+    )
+    embed.set_footer(text="Click 'End Study Session' when finished to save your progress!")
     return embed
 
 def create_help_embed() -> discord.Embed:
-    """Format Study Tracker Bot help documentation."""
+    """Format updated Study Tracker help guide."""
     embed = discord.Embed(
-        title="📚 Study Tracker & Interview Preparation Bot",
-        description="Track your interview preparation, build daily streaks, practice with AI interview coaches, customize time-slotted exit schedules, and view rich graphical analytics.",
+        title="📚 Study Tracker Bot: Live Sessions, Topics, Notes & Leaderboards",
+        description="A streamlined daily technical interview study assistant. Track live study sessions, log topics, save notes, climb leaderboards, and avoid getting roasted!",
         color=COLOR_PRIMARY
     )
 
     embed.add_field(
-        name="📝 Study Logging & Scorecards",
-        value="• `/study log <category> <topic> [problems] [minutes] [confidence] [notes]` - Log study session\n"
-              "• `/study quicklog` - Interactive popup modal for quick logging\n"
-              "• `/study progress [user]` - View visual progress scorecard & hours\n"
-              "• `/study chart [user]` - 📈 Render high-resolution graphical analytics image\n"
-              "• `/study streak` - View active daily study streak & milestones\n"
-              "• `/study roadmap [category]` - Browse curriculum for Microservices (K8s), DSA, LLD, HLD, Core CS",
+        name="⏱️ Real-Time Live Study Sessions",
+        value=(
+            "• `/session start [topic] [category]` - Start a live study session with real-time timer\n"
+            "• `/session stop [notes] [topics]` - Conclude session and log stats\n"
+            "• `/session status` - Check current elapsed time\n"
+            "• 🔌 **Offline Auto-Stop:** If your Discord status goes **Offline**, the bot automatically saves your minutes!"
+        ),
         inline=False
     )
 
     embed.add_field(
-        name="📁 File Curriculum Ingestion & Topic Checklists",
-        value="• `/study import_plan [file] [text]` - 📥 Ingest `.md`, `.txt`, `.json`, `.yaml`, or `.csv` files into your syllabus\n"
-              "• `/study topic_list [category]` - View your personal checklist of topics\n"
-              "• `/study topic_toggle <topic_name> [status]` - Toggle topic status (`TODO`, `IN_PROGRESS`, `COMPLETED`)",
+        name="📝 Daily Study & Multi-Topic Logging",
+        value=(
+            "• `/study log <topics> [notes] [duration] [problems] [category]`\n"
+            "  *Log 1 or multiple numbered topics in a single command!*\n"
+            "  *Example:* `/study log topics:\"1. Factory Pattern 2. 0/1 Knapsack DP 3. Redis Caching\" notes:\"Learned LRU eviction\"`\n"
+            "• `/study quicklog` - Interactive multi-topic and notes popup modal\n"
+            "• `/study profile [user]` - View candidate rank, badges, hours, and statistics\n"
+            "• `/study streak` - Check your active daily study streak"
+        ),
         inline=False
     )
 
     embed.add_field(
-        name="🎯 Target Exit Scheduling & Social Cloning",
-        value="• `/study schedule [user]` - View current time-slotted study schedule and exit countdown\n"
-              "• `/study schedule_adjust <instruction>` - Prompt Gemini AI to dynamically update your schedule\n"
-              "• `/study schedule_browse [query]` - Browse shared community study schedules\n"
-              "• `/study schedule_clone <schedule_id>` - Clone/fork a peer's schedule into your profile\n"
-              "• `/study reminders <enable> [hour_utc]` - Daily inactivity reminder notifications to protect streaks",
+        name="🔍 Study Notes & Mastered Topics",
+        value=(
+            "• `/notes [query] [user]` - Search and browse past study notes & key takeaways\n"
+            "• `/topics [user]` - View complete list of all technical topics you have mastered"
+        ),
         inline=False
     )
 
     embed.add_field(
-        name="📖 Learning Resources & Focus Timer",
-        value="• `/study resources [category] [topic]` - Browse curated & community resources\n"
-              "• `/study resource_add <category> <topic> <title> <url>` - Submit a new prep resource/link\n"
-              "• `/study resource_modal` - Interactive form to share resources\n"
-              "• `/study timer [duration] [task]` / `/study pomodoro` - Focus timer with auto-logging",
+        name="🏆 Gamification & Server Leaderboard",
+        value=(
+            "• `/leaderboard [category]` - Interactive server ranking (Top Topics, Streaks, Study Hours)\n"
+            "• **Ranks:** 🥉 *Novice* (1+) $\\to$ 🥈 *Apprentice* (10+) $\\to$ 🥇 *Specialist* (25+) $\\to$ 🎖️ *Artisan* (50+) $\\to$ 🔮 *Architect* (100+) $\\to$ 👑 *Champion* (250+) $\\to$ 🌟 *Grandmaster* (500+)"
+        ),
         inline=False
     )
 
     embed.add_field(
-        name="🤖 Gemini AI Interview Coach",
-        value="• `/study plan <role> <company> [weeks]` - Tailored preparation plan for dream companies\n"
-              "• `/study quiz <topic> [difficulty]` - Mock interview technical quiz with instant grading\n"
-              "• `/study revise` - Spaced repetition queue of topics needing review",
+        name="🌶️ Sarcastic Roasts",
+        value=(
+            "• `/roast [user]` - Drop a hilarious sarcastic roast on someone who skipped studying today\n"
+            "• *Automatic Daily Check:* If you don't log any topics for the day, expect a wake-up roast!"
+        ),
         inline=False
     )
 
-    embed.set_footer(text="100% Free • Powered by Google Gemini AI")
+    embed.set_footer(text="Consistency is key • Start today with /session start or /study quicklog")
     return embed

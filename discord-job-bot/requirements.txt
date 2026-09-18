@@ -14,8 +14,7 @@ SQLAlchemy>=2.0.25
 playwright>=1.41.0
 playwright-stealth>=1.0.6
 
-# Google Gemini AI & PDF Parsing
-google-genai>=0.1.1
+# OpenRouter AI & PDF Parsing
 pypdf>=3.17.0
 
 # Configuration & Security

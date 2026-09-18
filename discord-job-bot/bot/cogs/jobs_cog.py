@@ -87,10 +87,12 @@ class JobsCog(commands.GroupCog, group_name="jobs"):
             )
 
         if not jobs:
-            loc_text = f" in {location}" if location else ""
-            cnt_text = f" ({country_val or 'India'})"
+            loc_str = location.strip() if location else (country_val or "the specified location")
             await interaction.followup.send(
-                f"❌ No jobs found matching **'{query}'**{loc_text}{cnt_text}. Try broader keywords or change the location filter.",
+                f"❌ **No matching job profile!** There is no job profile similar to **'{query}'** in **{loc_str}**.\n\n"
+                f"💡 *Tips:*\n"
+                f"• Search with specific tech stack keywords (e.g. `/jobs search query: Spring Boot location: {loc_str}`)\n"
+                f"• Try broadening the location or searching across major tech hubs (Bengaluru, Pune, Hyderabad, Remote).",
                 ephemeral=True
             )
             return
@@ -115,7 +117,7 @@ class JobsCog(commands.GroupCog, group_name="jobs"):
         if remote:
             filter_badges.append("`🏠 Remote`")
 
-        header = f"🔍 Found **{len(jobs)}** positions across **LinkedIn, Naukri & Portals**\n" + " • ".join(filter_badges) + ":"
+        header = f"🔍 Found **{len(jobs)}** active vacancies on **LinkedIn & Naukri**\n" + " • ".join(filter_badges) + ":"
         await interaction.followup.send(
             content=header,
             embed=embed,

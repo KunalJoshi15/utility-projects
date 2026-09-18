@@ -1,45 +1,37 @@
+from __future__ import annotations
 from .embeds import (
-    create_progress_embed,
-    create_streak_embed,
-    create_roadmap_embed,
-    create_study_plan_embed,
-    create_quiz_embed,
-    create_quiz_evaluation_embed,
-    create_revision_embed,
+    create_study_logged_embed,
+    create_notes_list_embed,
+    create_topics_list_embed,
     create_leaderboard_embed,
-    create_pomodoro_embed,
+    create_profile_embed,
+    create_roast_embed,
     create_help_embed,
     COLOR_PRIMARY,
     COLOR_SUCCESS,
     COLOR_WARNING,
     COLOR_DANGER,
-    COLOR_FIRE,
+    COLOR_PURPLE,
     COLOR_AI
 )
-from .modals import QuickStudyLogModal, CreateGoalModal, QuizAnswerModal
-from .views import PomodoroView, RoadmapSelectView, QuizActionView
+from .modals import QuickLogModal
+from .views import LeaderboardView, NotesPaginationView
 
 __all__ = [
-    "create_progress_embed",
-    "create_streak_embed",
-    "create_roadmap_embed",
-    "create_study_plan_embed",
-    "create_quiz_embed",
-    "create_quiz_evaluation_embed",
-    "create_revision_embed",
+    "create_study_logged_embed",
+    "create_notes_list_embed",
+    "create_topics_list_embed",
     "create_leaderboard_embed",
-    "create_pomodoro_embed",
+    "create_profile_embed",
+    "create_roast_embed",
     "create_help_embed",
-    "QuickStudyLogModal",
-    "CreateGoalModal",
-    "QuizAnswerModal",
-    "PomodoroView",
-    "RoadmapSelectView",
-    "QuizActionView",
+    "QuickLogModal",
+    "LeaderboardView",
+    "NotesPaginationView",
     "COLOR_PRIMARY",
     "COLOR_SUCCESS",
     "COLOR_WARNING",
     "COLOR_DANGER",
-    "COLOR_FIRE",
+    "COLOR_PURPLE",
     "COLOR_AI"
 ]

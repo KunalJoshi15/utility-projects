@@ -1,5 +1,7 @@
+from __future__ import annotations
 import enum
 from datetime import datetime, timezone
+from typing import List, Optional
 from sqlalchemy import (
     Column,
     String,
@@ -16,15 +18,8 @@ Base = declarative_base()
 def get_utc_now():
     return datetime.now(timezone.utc)
 
-class StudyCategory(enum.Enum):
-    DSA = "DSA"
-    LLD = "LLD"
-    HLD = "HLD"
-    MICROSERVICES = "MICROSERVICES"
-    DEVOPS_CLOUD = "DEVOPS_CLOUD"
-    CORE_CS = "CORE_CS"
-    MOCK_INTERVIEW = "MOCK_INTERVIEW"
-    CUSTOM = "CUSTOM"
+def get_utc_date_str():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 class UserStudyProfile(Base):
     __tablename__ = "user_study_profiles"
@@ -33,60 +28,61 @@ class UserStudyProfile(Base):
     username = Column(String(100), nullable=True)
     display_name = Column(String(150), nullable=True)
     
+    # Gamified Rank & Stats
+    rank_level = Column(Integer, default=1)                      # 1 to 7
+    rank_title = Column(String(100), default="Novice Scholar")   # "Novice Scholar", "System Architect", etc.
+    total_topics_count = Column(Integer, default=0, index=True) # Total unique topics covered
+    total_study_minutes = Column(Integer, default=0)
+    total_problems_solved = Column(Integer, default=0)
+    
+    # Custom Reminders & Inactivity Roasts
+    reminders_enabled = Column(Boolean, default=True)
+    reminder_hour_utc = Column(Integer, default=15)              # 15 UTC = 8:30 PM IST
     target_role = Column(String(150), nullable=True, default="Software Engineer")
     target_companies = Column(String(255), nullable=True, default="Google, Microsoft, Amazon")
-    target_interview_date = Column(String(50), nullable=True)
-    target_exit_date = Column(String(50), nullable=True)          # e.g. "2026-12-31" or "3 Months"
-    daily_study_slots = Column(String(255), nullable=True, default="Morning 7:30-9:00 AM, Evening 8:30-10:00 PM")
-    reminders_enabled = Column(Boolean, default=True)
-    reminder_hour_utc = Column(Integer, default=15)               # 15 UTC = 8:30 PM IST
-    daily_goal_minutes = Column(Integer, default=120)
-    daily_goal_problems = Column(Integer, default=3)
     
     created_at = Column(DateTime, default=get_utc_now)
     updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now)
 
-    logs = relationship("StudyLog", back_populates="user", cascade="all, delete-orphan")
-    goals = relationship("StudyGoal", back_populates="user", cascade="all, delete-orphan")
-    topics = relationship("RoadmapTopicItem", back_populates="user", cascade="all, delete-orphan")
-    schedules = relationship("StudySchedulePlan", back_populates="user", cascade="all, delete-orphan")
+    sessions = relationship("DailyStudySession", back_populates="user", cascade="all, delete-orphan", order_by="desc(DailyStudySession.logged_at)")
+    topics = relationship("StudyTopicItem", back_populates="user", cascade="all, delete-orphan", order_by="desc(StudyTopicItem.logged_at)")
+    badges = relationship("StudyBadge", back_populates="user", cascade="all, delete-orphan")
 
-class StudyLog(Base):
-    __tablename__ = "study_logs"
+class DailyStudySession(Base):
+    __tablename__ = "daily_study_sessions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     discord_id = Column(String(64), ForeignKey("user_study_profiles.discord_id"), nullable=False, index=True)
     
-    category = Column(String(50), nullable=False, default="DSA")  # DSA, LLD, HLD, MICROSERVICES, DEVOPS_CLOUD, CORE_CS, MOCK_INTERVIEW, CUSTOM
-    topic = Column(String(150), nullable=False)                   # e.g. "Kubernetes Deployments", "Dynamic Programming"
-    subtopic_or_problem = Column(String(200), nullable=True)     # e.g. "Ingress & HPA", "Coin Change II"
+    session_date = Column(String(20), nullable=False, index=True) # "YYYY-MM-DD"
+    duration_minutes = Column(Integer, default=45)
+    problems_solved = Column(Integer, default=0)
+    category = Column(String(50), default="General")              # DSA, LLD, HLD, Cloud, General
     
-    duration_minutes = Column(Integer, default=30)
-    problems_solved = Column(Integer, default=1)
-    confidence_score = Column(Integer, default=4)                 # 1 to 5 stars
-    
+    # Notes & Takeaways logged for this session
     notes = Column(Text, nullable=True)
-    external_link = Column(String(300), nullable=True)
+    topics_count = Column(Integer, default=1)
+    
     logged_at = Column(DateTime, default=get_utc_now, index=True)
 
-    user = relationship("UserStudyProfile", back_populates="logs")
+    user = relationship("UserStudyProfile", back_populates="sessions")
+    topics = relationship("StudyTopicItem", back_populates="session", cascade="all, delete-orphan")
 
-class StudyGoal(Base):
-    __tablename__ = "study_goals"
+class StudyTopicItem(Base):
+    __tablename__ = "study_topic_items"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey("daily_study_sessions.id"), nullable=True, index=True)
     discord_id = Column(String(64), ForeignKey("user_study_profiles.discord_id"), nullable=False, index=True)
     
-    title = Column(String(200), nullable=False)
-    category = Column(String(50), default="DSA")
-    target_count = Column(Integer, nullable=False)
-    current_count = Column(Integer, default=0)
-    unit = Column(String(30), default="problems")                # problems, hours, topics
-    deadline = Column(String(50), nullable=True)
-    is_completed = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=get_utc_now)
+    topic_name = Column(String(255), nullable=False, index=True)
+    category = Column(String(50), default="General")
+    notes = Column(Text, nullable=True)                          # Specific takeaway for this topic
+    logged_date = Column(String(20), nullable=False, index=True) # "YYYY-MM-DD"
+    logged_at = Column(DateTime, default=get_utc_now, index=True)
 
-    user = relationship("UserStudyProfile", back_populates="goals")
+    user = relationship("UserStudyProfile", back_populates="topics")
+    session = relationship("DailyStudySession", back_populates="topics")
 
 class StudyStreak(Base):
     __tablename__ = "study_streaks"
@@ -97,66 +93,31 @@ class StudyStreak(Base):
     last_study_date = Column(String(20), nullable=True)          # "YYYY-MM-DD"
     total_days_studied = Column(Integer, default=0)
     freeze_count = Column(Integer, default=2)
-    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now)
 
-class PomodoroSession(Base):
-    __tablename__ = "pomodoro_sessions"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    discord_id = Column(String(64), nullable=False, index=True)
-    task_description = Column(String(255), nullable=False)
-    category = Column(String(50), default="DSA")
-    duration_minutes = Column(Integer, default=25)
-    status = Column(String(30), default="COMPLETED")              # COMPLETED, ABORTED
-    started_at = Column(DateTime, default=get_utc_now)
-    completed_at = Column(DateTime, default=get_utc_now)
-
-class StudyResource(Base):
-    __tablename__ = "study_resources"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    category = Column(String(50), nullable=False, index=True)    # DSA, LLD, HLD, MICROSERVICES, DEVOPS_CLOUD, CORE_CS, CUSTOM
-    topic = Column(String(150), nullable=False, index=True)
-    title = Column(String(200), nullable=False)
-    url = Column(String(500), nullable=False)
-    resource_type = Column(String(50), default="ARTICLE")        # ARTICLE, VIDEO, DOCUMENTATION, PRACTICE, REPO, CHEATSHEET, BOOK
-    description = Column(Text, nullable=True)
-    added_by_discord_id = Column(String(64), nullable=True, default="OFFICIAL")
-    added_by_name = Column(String(100), nullable=True, default="Curated")
-    is_verified = Column(Boolean, default=True)
-    upvotes = Column(Integer, default=1)
-    created_at = Column(DateTime, default=get_utc_now)
-
-class RoadmapTopicItem(Base):
-    __tablename__ = "roadmap_topic_items"
+class StudyBadge(Base):
+    __tablename__ = "study_badges"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     discord_id = Column(String(64), ForeignKey("user_study_profiles.discord_id"), nullable=False, index=True)
-    category = Column(String(50), nullable=False, default="CUSTOM", index=True)
-    topic_name = Column(String(200), nullable=False, index=True)
-    subtopics = Column(Text, nullable=True)                       # JSON array of subtopics / problem names
-    status = Column(String(30), default="TODO", index=True)       # TODO, IN_PROGRESS, COMPLETED
-    source = Column(String(50), default="FILE_UPLOAD")            # BUILTIN, FILE_UPLOAD, MANUAL, SHARED_SCHEDULE
-    order_index = Column(Integer, default=0)
-    completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=get_utc_now)
+    
+    badge_key = Column(String(50), nullable=False)               # e.g. "first_topic", "topic_10", "streak_7"
+    title = Column(String(100), nullable=False)
+    description = Column(String(255), nullable=False)
+    icon = Column(String(20), default="🎖️")
+    unlocked_at = Column(DateTime, default=get_utc_now)
 
-    user = relationship("UserStudyProfile", back_populates="topics")
+    user = relationship("UserStudyProfile", back_populates="badges")
 
-class StudySchedulePlan(Base):
-    __tablename__ = "study_schedule_plans"
+class ActiveLiveSession(Base):
+    __tablename__ = "active_live_sessions"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    discord_id = Column(String(64), ForeignKey("user_study_profiles.discord_id"), nullable=False, index=True)
-    author_name = Column(String(100), nullable=True, default="Candidate")
-    title = Column(String(200), nullable=False)
-    target_exit_date = Column(String(50), nullable=True)          # e.g. "2026-11-30" or "90-Day Exit"
-    daily_slots = Column(String(255), nullable=True, default="Morning: 7:30-9:00 AM, Evening: 8:30-10:00 PM")
-    schedule_json = Column(Text, nullable=False)                  # JSON structure of daily slots, topics & weekly breakdown
-    is_public = Column(Boolean, default=True, index=True)
-    cloned_from_id = Column(Integer, nullable=True)
-    clones_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=get_utc_now)
-    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now)
-
-    user = relationship("UserStudyProfile", back_populates="schedules")
+    discord_id = Column(String(64), primary_key=True, index=True)
+    guild_id = Column(String(64), nullable=True)
+    channel_id = Column(String(64), nullable=True)
+    message_id = Column(String(64), nullable=True)               # Active live message to edit
+    
+    topic_or_goal = Column(String(255), default="General Study")
+    category = Column(String(50), default="General")
+    
+    start_time = Column(DateTime, default=get_utc_now)
+    last_heartbeat = Column(DateTime, default=get_utc_now)

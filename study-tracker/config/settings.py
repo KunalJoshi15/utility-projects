@@ -24,14 +24,12 @@ class StudyTrackerSettings:
     DISCORD_BOT_TOKEN: str = os.getenv("STUDY_BOT_TOKEN", os.getenv("DISCORD_BOT_TOKEN", ""))
     DISCORD_GUILD_ID: Optional[str] = os.getenv("DISCORD_GUILD_ID", None)
 
-    # AI Model Configuration (APInex Integration & Google Gemini)
-    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", None)
-    APINEX_API_KEY: Optional[str] = os.getenv("APINEX_API_KEY", os.getenv("APIENX_API_KEY", os.getenv("GEMINI_API_KEY", None)))
-    APIENX_API_KEY: Optional[str] = os.getenv("APIENX_API_KEY", os.getenv("APINEX_API_KEY", os.getenv("GEMINI_API_KEY", None)))
-    APINEX_BASE_URL: str = os.getenv("APINEX_BASE_URL", os.getenv("APIENX_BASE_URL", os.getenv("AI_BASE_URL", "https://api.apinex.bond/v1")))
-    APIENX_BASE_URL: str = os.getenv("APIENX_BASE_URL", os.getenv("APINEX_BASE_URL", os.getenv("AI_BASE_URL", "https://api.apinex.bond/v1")))
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "free/gemini-3.8-flash")
-    AI_PROVIDER: str = os.getenv("AI_PROVIDER", "apinex")
+    # AI Model Configuration (OpenRouter Integration)
+    OPENROUTER_API_KEY: Optional[str] = os.getenv("OPENROUTER_API_KEY", None)
+    OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstrip('/')
+    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "inclusionai/ling-3.0-flash-vl:free")
+    OPENROUTER_SITE_URL: str = os.getenv("OPENROUTER_SITE_URL", "https://discord-job-bot.local")
+    OPENROUTER_APP_NAME: str = os.getenv("OPENROUTER_APP_NAME", "Study Tracker Coach Bot")
 
     # Database & Storage
     DATABASE_URL: str = os.getenv(

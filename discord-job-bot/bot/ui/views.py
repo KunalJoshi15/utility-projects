@@ -1,3 +1,4 @@
+import urllib.parse
 import discord
 from typing import List, Optional
 from database.models import CachedJob, ApplyType
@@ -10,6 +11,7 @@ class JobPaginationView(discord.ui.View):
         self.user_id = str(user_id)
         self.current_index = 0
         self.link_button = None
+        self.share_button = None
         self._refresh_components()
 
     def _refresh_components(self):
@@ -17,19 +19,31 @@ class JobPaginationView(discord.ui.View):
         self.prev_button.disabled = self.current_index == 0
         self.next_button.disabled = self.current_index >= len(self.jobs) - 1
 
-        # Remove existing dynamic link button if present
+        # Remove existing dynamic link and share buttons if present
         if self.link_button:
             self.remove_item(self.link_button)
+        if self.share_button:
+            self.remove_item(self.share_button)
 
         # Add dynamic link button for current job destination
         prov = current_job.provider.replace("_", " ").title()
-        btn_label = f"🔗 Open {prov}" if len(prov) < 35 else "🔗 Open Career Portal"
+        btn_label = f"🔗 Open on {prov}" if len(prov) < 25 else "🔗 Open Job Listing"
         self.link_button = discord.ui.Button(
             label=btn_label,
             style=discord.ButtonStyle.link,
             url=current_job.apply_url
         )
         self.add_item(self.link_button)
+
+        # Add dynamic 1-click Share on LinkedIn button
+        encoded_apply = urllib.parse.quote(current_job.apply_url)
+        share_url = f"https://www.linkedin.com/sharing/share-offsite/?url={encoded_apply}"
+        self.share_button = discord.ui.Button(
+            label="📢 Share on LinkedIn",
+            style=discord.ButtonStyle.link,
+            url=share_url
+        )
+        self.add_item(self.share_button)
 
     @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary, custom_id="job_prev")
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -109,7 +123,13 @@ class JobDetailView(discord.ui.View):
         self.user_id = str(user_id)
         
         # Add dynamic link button
-        self.add_item(discord.ui.Button(label="🔗 Open Listing", style=discord.ButtonStyle.link, url=job.apply_url))
+        prov = job.provider.replace("_", " ").title()
+        self.add_item(discord.ui.Button(label=f"🔗 Open on {prov}", style=discord.ButtonStyle.link, url=job.apply_url))
+        
+        # Add dynamic Share on LinkedIn button
+        encoded_apply = urllib.parse.quote(job.apply_url)
+        share_url = f"https://www.linkedin.com/sharing/share-offsite/?url={encoded_apply}"
+        self.add_item(discord.ui.Button(label="📢 Share on LinkedIn", style=discord.ButtonStyle.link, url=share_url))
 
     @discord.ui.button(label="⚡ Auto-Apply", style=discord.ButtonStyle.success, custom_id="detail_apply")
     async def apply_now(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -146,3 +166,4 @@ class JobDetailView(discord.ui.View):
 
         embed = create_resume_job_fit_embed(fit_data, user.full_name or user.username)
         await interaction.followup.send(embed=embed, ephemeral=True)
+

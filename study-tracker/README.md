@@ -2,16 +2,20 @@
 
 An intelligent Discord bot and tracking service powered by **Python**, **discord.py**, **Google Gemini AI**, and **SQLAlchemy** designed to track career and interview preparation progress across **Microservices & Kubernetes**, **DSA**, **Low-Level Design (LLD)**, **High-Level Design (HLD)**, and **CS Fundamentals**.
 
----
+---## 🌟 Key Features
 
-## 🌟 Key Features
+1. **🎯 Multi-Track System & Candidate Enrollment**:
+   - **Master Preparation Tracks**: 6 pre-seeded master curriculums covering **Master Career Prep** (43 modules across all domains), **Microservices & Kubernetes (10 modules)**, **DSA Patterns (10 modules)**, **LLD Machine Coding (10 modules)**, **HLD Distributed Systems (9 modules)**, and **CS Fundamentals (4 modules)**.
+   - **📊 Excel (`.xlsx`/`.xls`) & CSV Ingestion**: Candidates can upload their custom Excel study schedules or syllabus spreadsheets directly to generate new tracks.
+   - **👥 Multi-User Progress Isolation**: Any candidate can enroll in any track (and multiple tracks simultaneously). Each user's topic status (`TODO`, `IN_PROGRESS`, `COMPLETED`), confidence scores, and completion percentage are tracked 100% independently.
+   - **Interactive UI**: 1-click Discord buttons to enroll and view live progress scorecards (`/track list`, `/track enroll`, `/track progress`, `/track toggle`, `/track create`, `/track my`).
 
-1. **📝 Study Logging & Categorization**:
+2. **📝 Study Logging & Categorization**:
    - Log preparation across **Microservices & Kubernetes (☸️)**, **DSA (🧩)**, **LLD (🏗️)**, **HLD (🌐)**, **Core CS (💻)**, and **Mock Interviews (🎤)**.
    - Record problems/topics completed, study duration, confidence ratings (1-5 ⭐), notes, and complexity breakdowns.
    - Quick logging via slash commands or interactive popup modals (`/study quicklog`).
 
-2. **☸️ Comprehensive Microservices & Kubernetes Roadmap**:
+3. **☸️ Comprehensive Microservices & Kubernetes Roadmap**:
    - Dedicated structured curriculum tracking cloud-native distributed architecture:
      - **Kubernetes Core & Workloads**: Pods, Deployments, StatefulSets, Limits/Requests, Resource Quotas.
      - **Kubernetes Networking & Ingress**: ClusterIP, NodePort, LoadBalancer, Ingress Controllers, NetworkPolicies, CoreDNS.
@@ -23,40 +27,40 @@ An intelligent Discord bot and tracking service powered by **Python**, **discord
      - **Communication & Service Mesh**: gRPC & Protobuf, Backend-For-Frontend (BFF), Service Mesh (Istio / Envoy), Circuit Breakers (Resilience4j).
      - **Observability & Distributed Tracing**: OpenTelemetry standard, Jaeger, Prometheus & Grafana, Centralized Logging (Loki/ELK).
 
-3. **📁 File-Based Curriculum & Plan Ingestion**:
+4. **📁 File-Based Curriculum & Plan Ingestion**:
    - Ingest any syllabus file (`.md`, `.txt`, `.json`, `.yaml`, `.csv`) or paste curriculum outlines directly (`/study import_plan`).
    - Gemini AI parses and categorizes topics automatically into your personal roadmap.
    - **Topic Checklist & Progress**: Track individual topics as `TODO`, `IN_PROGRESS`, or `COMPLETED` (`/study topic_list`, `/study topic_toggle`).
 
-4. **🎯 Target Exit Date & Daily Schedule Engine**:
+5. **🎯 Target Exit Date & Daily Schedule Engine**:
    - Calculate structured daily/weekly timelines toward your target resignation/exit date (`/study schedule`).
    - Allocates morning & evening study slots (*what, when, and how to study*).
    - **🤖 Gemini AI Adaptation**: Modify your schedule anytime with natural language instructions (`/study schedule_adjust "I only have 1 hour on weekdays"`).
    - **👥 Social Schedule Forking**: Browse peer schedules and clone them into your profile with adapted target dates (`/study schedule_browse`, `/study schedule_clone`).
 
-5. **📈 High-Resolution Graphical Progress Charts**:
+6. **📈 High-Resolution Graphical Progress Charts**:
    - Generates sleek dark-mode multi-panel analytics graphs (`/study chart`):
      - Daily study minutes (14-day history)
      - Cumulative study hours growth trajectory
      - Category distribution donut chart (Microservices, DSA, LLD, HLD, Core CS)
      - Syllabus topic completion progress bar
 
-6. **⏰ Automated Inactivity & Streak Reminders**:
+7. **⏰ Automated Inactivity & Streak Reminders**:
    - Background notifier delivers motivational DM reminders if you haven't logged prep by your configured evening reminder time (`/study reminders`).
 
-7. **📚 Preparation Resources Catalog & Community Sharing**:
+8. **📚 Preparation Resources Catalog & Community Sharing**:
    - Built-in curated catalog of top industry guides (Kubernetes Official Docs, Microservices.io, Confluent Kafka, NeetCode 150, Striver's A2Z Sheet, Refactoring.Guru, System Design Primer).
    - **Community Submissions**: Share and upvote resources (`/study resource_add`, `/study resource_modal`, `/study upvote`).
 
-8. **⏱️ Pomodoro Focus Timer**:
+9. **⏱️ Pomodoro Focus Timer**:
    - Dedicated focus timer (25m / 50m / custom) with interactive Discord buttons (`Complete & Log Session`, `Cancel`) and automatic progress logging.
 
-9. **🤖 Gemini AI Interview Coach**:
-   - **`/study plan <role> <company> [weeks]`**: Generates a tailored week-by-week study plan for your dream company.
-   - **`/study quiz <topic> [difficulty]`**: Mock interview technical concept questions with immediate AI grading and ideal model answers.
-   - **`/study revise`**: Spaced repetition queue suggesting topics that need revision.
+10. **🤖 Gemini AI Interview Coach**:
+    - **`/study plan <role> <company> [weeks]`**: Generates a tailored week-by-week study plan for your dream company.
+    - **`/study quiz <topic> [difficulty]`**: Mock interview technical concept questions with immediate AI grading and ideal model answers.
+    - **`/study revise`**: Spaced repetition queue suggesting topics that need revision.
 
-10. **🏆 Server Study Leaderboard**:
+11. **🏆 Server Study Leaderboard**:
     - Friendly server rankings by total study hours and problems solved (`/study leaderboard`).
 
 ---
@@ -65,6 +69,13 @@ An intelligent Discord bot and tracking service powered by **Python**, **discord
 
 | Category | Command | Description |
 |---|---|---|
+| **🎯 Multi-Track System** | `/track list [category] [query]` | Browse Master & Community preparation tracks |
+| | `/track enroll <track_id>` | Enroll in a track with separate, isolated personal progress |
+| | `/track unenroll <track_id>` | Unenroll from a preparation track |
+| | `/track progress [track_id] [user]` | View detailed visual scorecard and checklist for an enrolled track |
+| | `/track toggle <track_id> <topic> [status] [confidence] [notes]` | Mark topic as Completed, In Progress, or To-Do in your track |
+| | `/track create [title] [category] [description] [file] [text]` | 📊 Create a new track by uploading Excel (`.xlsx`/`.xls`), CSV, or text |
+| | `/track my [user]` | View all tracks you are enrolled in with live completion % |
 | **📝 Progress Tracking** | `/study log <category> <topic> [problems] [minutes] [confidence] [notes]` | Record a completed study session |
 | | `/study quicklog` | Interactive popup modal for quick session logging |
 | | `/study progress [user]` | View visual preparation scorecard & breakdown |
@@ -92,6 +103,7 @@ An intelligent Discord bot and tracking service powered by **Python**, **discord
 | | `/study revise` | Spaced repetition queue of topics needing review |
 | **🏆 Community** | `/study leaderboard [limit]` | Server study champions leaderboard |
 | **General** | `/help` | Complete bot manual and command reference |
+| | `/status` | Latency, database, and AI status |Complete bot manual and command reference |
 | | `/status` | Latency, database, and AI status |
 
 ---

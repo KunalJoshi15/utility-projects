@@ -97,6 +97,48 @@ SIMILAR_ROLES_MAP: Dict[str, List[str]] = {
         "Director of Engineering",
         "Software Development Manager",
         "VP of Engineering"
+    ],
+    "spring": [
+        "Java Developer",
+        "Backend Engineer",
+        "Full Stack Developer",
+        "Tech Lead",
+        "System Architect"
+    ],
+    "java": [
+        "Backend Engineer",
+        "Spring Boot Developer",
+        "Full Stack Engineer",
+        "System Architect",
+        "Tech Lead"
+    ],
+    "python": [
+        "Backend Engineer",
+        "Django Developer",
+        "Data Engineer",
+        "Machine Learning Engineer",
+        "DevOps Engineer"
+    ],
+    "react": [
+        "Frontend Engineer",
+        "UI Developer",
+        "Full Stack Developer",
+        "JavaScript Developer",
+        "Next.js Developer"
+    ],
+    "cloud": [
+        "DevOps Engineer",
+        "Solutions Architect",
+        "Site Reliability Engineer",
+        "Platform Engineer",
+        "Security Engineer"
+    ],
+    "ai": [
+        "Machine Learning Engineer",
+        "Data Scientist",
+        "Deep Learning Engineer",
+        "MLOps Engineer",
+        "AI Researcher"
     ]
 }
 
@@ -129,8 +171,27 @@ class SalaryService:
         location: Optional[str] = "India"
     ) -> Dict[str, Any]:
         """Generate comprehensive AmbitionBox, Glassdoor, and Levels.fyi links for role & similar roles."""
-        clean_role = role.split("—")[-1].strip() if "—" in role else role.strip()
-        comp_clean = company.strip() if company and "Live" not in company and "Portal" not in company else None
+        clean_role = role
+        if "@" in clean_role:
+            clean_role = clean_role.split("@")[0].strip()
+        if "—" in clean_role:
+            clean_role = clean_role.split("—")[0].strip()
+        if not clean_role:
+            clean_role = role.strip()
+            
+        # Filter out generic placeholder aggregator phrases from company name
+        is_generic_company = False
+        if company:
+            comp_lower = company.lower()
+            generic_keywords = [
+                "index", "openings", "portal", "postings", "feed", "live",
+                "hirers", "employers", "verified", "platform", "companies",
+                "various", "multi", "hub"
+            ]
+            if any(k in comp_lower for k in generic_keywords):
+                is_generic_company = True
+                
+        comp_clean = company.strip() if (company and not is_generic_company) else None
         
         similar_roles = self.find_similar_roles(clean_role)
 

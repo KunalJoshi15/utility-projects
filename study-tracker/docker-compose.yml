@@ -1,0 +1,24 @@
+services:
+  study-tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: study_tracker_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./bot:/app/bot
+      - ./services:/app/services
+      - ./config:/app/config
+      - ./database:/app/database
+      - ./main.py:/app/main.py
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 256M

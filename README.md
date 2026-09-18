@@ -37,8 +37,8 @@ utility-projects/
 ## 🚀 Projects Overview
 
 ### 1. [🤖 Discord Job Bot](./discord-job-bot/README.md)
-An advanced, multi-user Discord bot powered by **Python**, **discord.py**, **Google Gemini AI**, and **Playwright**:
-- **✨ Gemini AI Resume Audits & Job Fit**: Real-time evaluation of resume fit for target roles + Google XYZ bullet rewrites.
+An advanced, multi-user Discord bot powered by **Python**, **discord.py**, **OpenRouter AI (Free & Paid Models)**, and **Playwright**:
+- **✨ OpenRouter AI Resume Audits & Job Fit**: Real-time evaluation of resume fit for target roles + Google XYZ bullet rewrites.
 - **🔍 Natural Language & Tech Search**: Search jobs by typing descriptions (`/jobs prompt`) or via modal (`/jobs describe`).
 - **🎯 Target Dream Company Tracking**: Monitor vacancies across Google, Microsoft, Amazon, Swiggy, etc.
 - **🔔 Scheduled Job Alerts (Anti-Spam)**: Configurable frequency (1h–24h), batch sizing (1–10), and private DM delivery.
@@ -57,7 +57,7 @@ A dedicated interview preparation, learning resources, and career progress track
 - **📊 Visual Progress Scorecards**: Progress bars, weekly momentum, and hours breakdown (`/study progress`).
 - **🔥 Daily Study Streaks**: Daily streak tracking with milestone badges (`/study streak`).
 - **⏱️ Pomodoro Focus Timer**: 25m/custom study blocks with 1-click auto-logging (`/study timer`, `/study pomodoro`).
-- **🤖 Gemini AI Interview Coach**: AI weekly study plans, mock interview concept quizzes with grading, and spaced repetition revision queue (`/study plan`, `/study quiz`, `/study revise`).
+- **🤖 OpenRouter AI Interview Coach**: AI weekly study plans, mock interview concept quizzes with grading, and spaced repetition revision queue (`/study plan`, `/study quiz`, `/study revise`).
 - **🏆 Server Study Leaderboard**: Track and compete with peers on preparation time and problems solved.
 
 👉 **[Read full Study Tracker documentation & slash command guide](./study-tracker/README.md)**
