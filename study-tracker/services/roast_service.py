@@ -43,4 +43,23 @@ class RoastService:
 
         return f"{name_tag}{roast}"
 
+    async def get_dynamic_roast(
+        self,
+        username: Optional[str] = None,
+        streak_count: int = 0,
+        recent_topics: Optional[list[str]] = None
+    ) -> str:
+        """Generates dynamic AI roast using Gemini / Vertex AI, falling back to curated roast list."""
+        uname = username or "Candidate"
+        try:
+            from services.ai_service import ai_service
+            ai_roast = await ai_service.generate_ai_roast(uname, streak_count=streak_count, recent_topics=recent_topics)
+            if ai_roast:
+                return f"**{uname}**, {ai_roast}"
+        except Exception as e:
+            logger.debug(f"Dynamic AI roast fallback triggered: {e}")
+
+        return self.get_random_roast(username=username, streak_count=streak_count)
+
 roast_service = RoastService()
+

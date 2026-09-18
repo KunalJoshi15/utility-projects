@@ -19,13 +19,80 @@ class OpenRouterAIService:
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        default_model: Optional[str] = None
+        default_model: Optional[str] = None,
+        gemini_api_key: Optional[str] = None
     ):
+        self.gemini_api_key = gemini_api_key or getattr(settings, "GEMINI_API_KEY", None) or getattr(settings, "VERTEX_API_KEY", None)
+        self.gemini_model = getattr(settings, "GEMINI_MODEL", "gemini-2.5-flash")
+        self.gcp_project = getattr(settings, "GCP_PROJECT_ID", "seraphic-rune-366616")
+        self.gcp_location = getattr(settings, "GCP_LOCATION", "us-central1")
+        self.ai_provider = getattr(settings, "AI_PROVIDER", "auto")
+
         self.api_key = api_key or getattr(settings, "OPENROUTER_API_KEY", None)
         self.base_url = (base_url or getattr(settings, "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")).rstrip('/')
         self.default_model = default_model or getattr(settings, "OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
         self.site_url = getattr(settings, "OPENROUTER_SITE_URL", "https://discord-job-bot.local")
         self.app_name = getattr(settings, "OPENROUTER_APP_NAME", "Discord Job Bot")
+
+    async def call_gemini(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        model: Optional[str] = None,
+        temperature: float = 0.2
+    ) -> Optional[str]:
+        """Calls Google Gemini API or Google Cloud Vertex AI directly."""
+        key = self.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("VERTEX_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        model_name = model or self.gemini_model or "gemini-2.5-flash"
+
+        # 1. Try google.genai SDK
+        try:
+            from google import genai
+            client = None
+            if key and not key.startswith("your_"):
+                client = genai.Client(api_key=key)
+            elif self.gcp_project:
+                # Vertex AI client
+                client = genai.Client(vertexai=True, project=self.gcp_project, location=self.gcp_location)
+
+            if client:
+                full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+                response = await client.aio.models.generate_content(
+                    model=model_name,
+                    contents=full_prompt
+                )
+                if response and response.text:
+                    return response.text
+        except Exception as e:
+            logger.debug(f"google.genai SDK call attempt: {e}")
+
+        # 2. Try direct Google AI Studio / Vertex REST API
+        if key and not key.startswith("your_"):
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
+                full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+                payload = {
+                    "contents": [{
+                        "parts": [{"text": full_prompt}]
+                    }],
+                    "generationConfig": {
+                        "temperature": temperature
+                    }
+                }
+                timeout = aiohttp.ClientTimeout(total=8)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(url, json=payload) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                if parts:
+                                    return parts[0].get("text", "")
+            except Exception as e:
+                logger.warning(f"Direct Gemini REST API failed: {e}")
+
+        return None
 
     async def call_chat_completion(
         self,
@@ -34,69 +101,74 @@ class OpenRouterAIService:
         model: Optional[str] = None,
         temperature: float = 0.2,
         max_tokens: Optional[int] = None,
-        timeout_seconds: int = 5
+        timeout_seconds: int = 6
     ) -> Optional[str]:
         """
-        Send prompt to OpenRouter OpenAI-compatible chat completions endpoint.
-        Automatically falls back to openrouter/free or heuristic rules.
-        Returns the raw message content string or None on failure.
+        Executes AI completion with automatic multi-provider fallback:
+        1. Google Gemini / Vertex AI (if GEMINI_API_KEY / VERTEX_API_KEY is configured)
+        2. OpenRouter API (if OPENROUTER_API_KEY is configured)
         """
-        if not self.api_key or self.api_key.startswith("your_"):
-            logger.debug("OpenRouter API key is not configured or is placeholder. Using heuristic fallback.")
-            return None
+        # 1. Try Gemini / Vertex AI first if configured or requested
+        key = self.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("VERTEX_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if (self.ai_provider in ("gemini", "vertex", "auto") and key and not key.startswith("your_")) or self.ai_provider in ("gemini", "vertex"):
+            gemini_res = await self.call_gemini(prompt, system_prompt=system_prompt, model=model, temperature=temperature)
+            if gemini_res:
+                return gemini_res
 
-        url = f"{self.base_url}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": self.site_url,
-            "X-Title": self.app_name
-        }
-
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        # List of models to try in sequence
-        models_to_try = [
-            model or self.default_model,
-            "openrouter/free"
-        ]
-        # Remove duplicates while preserving order
-        unique_models = []
-        for m in models_to_try:
-            if m and m not in unique_models:
-                unique_models.append(m)
-
-        for current_model in unique_models:
-            payload: Dict[str, Any] = {
-                "model": current_model,
-                "messages": messages,
-                "temperature": temperature,
+        # 2. Try OpenRouter API
+        if self.api_key and not self.api_key.startswith("your_"):
+            url = f"{self.base_url}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": self.site_url,
+                "X-Title": self.app_name
             }
-            if max_tokens:
-                payload["max_tokens"] = max_tokens
 
-            try:
-                timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.post(url, headers=headers, json=payload) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            if "choices" in data and len(data["choices"]) > 0:
-                                choice = data["choices"][0]
-                                if "message" in choice and "content" in choice["message"]:
-                                    return choice["message"]["content"]
-                            logger.warning(f"Unexpected response structure from OpenRouter ({current_model}): {data}")
-                        elif resp.status == 429:
-                            logger.info(f"OpenRouter model '{current_model}' rate limited (429), trying next fallback model...")
-                            continue
-                        else:
-                            error_text = await resp.text()
-                            logger.warning(f"OpenRouter model '{current_model}' returned {resp.status}: {error_text}")
-            except Exception as e:
-                logger.warning(f"OpenRouter query failed for model '{current_model}': {e}")
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+
+            models_to_try = [
+                model or self.default_model,
+                "openrouter/free"
+            ]
+            unique_models = []
+            for m in models_to_try:
+                if m and m not in unique_models:
+                    unique_models.append(m)
+
+            for current_model in unique_models:
+                payload: Dict[str, Any] = {
+                    "model": current_model,
+                    "messages": messages,
+                    "temperature": temperature,
+                }
+                if max_tokens:
+                    payload["max_tokens"] = max_tokens
+
+                try:
+                    timeout = aiohttp.ClientTimeout(total=timeout_seconds)
+                    async with aiohttp.ClientSession(timeout=timeout) as session:
+                        async with session.post(url, headers=headers, json=payload) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                if "choices" in data and len(data["choices"]) > 0:
+                                    choice = data["choices"][0]
+                                    if "message" in choice and "content" in choice["message"]:
+                                        return choice["message"]["content"]
+                            elif resp.status == 429:
+                                logger.info(f"OpenRouter model '{current_model}' rate limited (429), trying next fallback...")
+                                continue
+                except Exception as e:
+                    logger.debug(f"OpenRouter query failed for model '{current_model}': {e}")
+
+        # 3. Fallback: If OpenRouter didn't succeed, try Gemini if not attempted yet
+        if not (key and not key.startswith("your_")):
+            gemini_res = await self.call_gemini(prompt, system_prompt=system_prompt, model=model, temperature=temperature)
+            if gemini_res:
+                return gemini_res
 
         return None
 

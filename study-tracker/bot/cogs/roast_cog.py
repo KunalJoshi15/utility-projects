@@ -28,18 +28,21 @@ class RoastCog(commands.Cog):
         target_user = user or interaction.user
         target_id = str(target_user.id)
 
+        await interaction.response.defer()
+
         async with get_db() as db:
             streak_stmt = select(StudyStreak).where(StudyStreak.discord_id == target_id)
             streak = (await db.execute(streak_stmt)).scalar_one_or_none()
             streak_count = streak.current_streak if streak else 0
 
-        roast_text = roast_service.get_random_roast(
+        roast_text = await roast_service.get_dynamic_roast(
             username=target_user.display_name or target_user.name,
             streak_count=streak_count
         )
 
         embed = create_roast_embed(roast_text, target_user.display_name or target_user.name)
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(RoastCog(bot))

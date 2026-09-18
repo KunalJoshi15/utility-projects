@@ -96,10 +96,11 @@ class ReminderService:
             if not user:
                 return False
 
-            roast_msg = roast_service.get_random_roast(
+            roast_msg = await roast_service.get_dynamic_roast(
                 username=profile.display_name or profile.username or user.name,
                 streak_count=streak_count
             )
+
 
             embed = discord.Embed(
                 title="🚨 Daily Study Inactivity Alert: Slacker Detected! 🚨",

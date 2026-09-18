@@ -38,10 +38,18 @@ class Settings:
     DISCORD_BOT_TOKEN: str = os.getenv("DISCORD_BOT_TOKEN", "")
     DISCORD_GUILD_ID: Optional[str] = os.getenv("DISCORD_GUILD_ID", None)
 
-    # AI Model Configuration (OpenRouter Integration)
+    # Gemini & Google Cloud Vertex AI Configuration
+    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", os.getenv("VERTEX_API_KEY", os.getenv("GOOGLE_API_KEY", None)))
+    VERTEX_API_KEY: Optional[str] = os.getenv("VERTEX_API_KEY", None)
+    GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", os.getenv("GOOGLE_CLOUD_PROJECT", "seraphic-rune-366616"))
+    GCP_LOCATION: str = os.getenv("GCP_LOCATION", os.getenv("VERTEX_LOCATION", "us-central1"))
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    AI_PROVIDER: str = os.getenv("AI_PROVIDER", "auto")  # "auto", "gemini", "vertex", "openrouter"
+
+    # OpenRouter Integration
     OPENROUTER_API_KEY: Optional[str] = os.getenv("OPENROUTER_API_KEY", None)
     OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstrip('/')
-    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "openrouter/free")
+    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
     OPENROUTER_SITE_URL: str = os.getenv("OPENROUTER_SITE_URL", "https://discord-job-bot.local")
     OPENROUTER_APP_NAME: str = os.getenv("OPENROUTER_APP_NAME", "Discord Job Bot")
 
