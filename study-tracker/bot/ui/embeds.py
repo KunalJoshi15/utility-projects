@@ -351,11 +351,148 @@ def create_live_session_status_embed(session: Any, display_name: str) -> discord
     embed.set_footer(text="Click 'End Study Session' when finished to save your progress!")
     return embed
 
+def create_session_edited_embed(result: Dict[str, Any], display_name: str) -> discord.Embed:
+    """Format confirmation embed when a study session is edited."""
+    topics = result.get("topics", [])
+    rank_info = result.get("rank_info", {})
+    embed = discord.Embed(
+        title=f"✏️ Study Log #{result['session_id']} Updated",
+        description=(
+            f"**Candidate:** `{display_name}` • **Date:** `{result.get('session_date')}`\n"
+            f"**Rank:** {rank_info.get('icon', '🥉')} **{rank_info.get('title', 'Novice')}** (Level {rank_info.get('level', 1)})\n"
+            f"**Total Mastered Topics:** `{result.get('total_topics', 0)}` • **Total Hours:** `{result.get('total_hours', 0)} hrs`"
+        ),
+        color=COLOR_AI
+    )
+
+    if topics:
+        topic_lines = [f"`{i}.` **{t}**" for i, t in enumerate(topics, 1)]
+        embed.add_field(
+            name=f"📚 Updated Topics ({len(topics)} total)",
+            value="\n".join(topic_lines)[:1000],
+            inline=False
+        )
+
+    if result.get("notes"):
+        embed.add_field(
+            name="📝 Updated Notes & Takeaways",
+            value=f"```markdown\n{result['notes'][:950]}\n```",
+            inline=False
+        )
+
+    embed.add_field(
+        name="⏱️ Updated Details",
+        value=f"• **Duration:** `{result.get('duration_minutes', 45)} mins`\n• **Problems:** `{result.get('problems_solved', 0)}`\n• **Category:** `{result.get('category', 'General')}`",
+        inline=True
+    )
+
+    embed.set_footer(text="Changes saved to database • View all logs with /study logs")
+    return embed
+
+def create_session_deleted_embed(result: Dict[str, Any], display_name: str) -> discord.Embed:
+    """Format confirmation embed when a study session is deleted."""
+    rank_info = result.get("rank_info", {})
+    embed = discord.Embed(
+        title=f"🗑️ Study Log #{result['session_id']} Deleted",
+        description=(
+            f"**Candidate:** `{display_name}`\n"
+            f"Successfully removed study session #{result['session_id']} and adjusted your metrics.\n\n"
+            f"• 📚 **Removed Topics:** `{len(result.get('deleted_topics', []))}`\n"
+            f"• ⏱️ **Removed Duration:** `{result.get('deleted_duration', 0)} mins`\n"
+            f"• 📊 **Remaining Total Topics:** `{result.get('remaining_total_topics', 0)}`\n"
+            f"• 🏆 **Current Rank:** {rank_info.get('icon', '🥉')} **{rank_info.get('title', 'Novice')}** (Level {rank_info.get('level', 1)})"
+        ),
+        color=COLOR_DANGER
+    )
+    embed.set_footer(text="Accidental log deleted • Use /study quicklog to log accurate study progress")
+    return embed
+
+def create_progress_reset_embed(display_name: str) -> discord.Embed:
+    """Format celebratory/clean confirmation embed after a full progress reset."""
+    embed = discord.Embed(
+        title="🔄 Study Progress Successfully Reset",
+        description=(
+            f"**Candidate:** `{display_name}`\n\n"
+            "✨ All your past study sessions, logged topics, notes, badges, and streaks have been cleared.\n\n"
+            "🌱 **You are now starting with a clean slate:**\n"
+            "• **Rank:** 🥉 **Unranked Aspirant** (Level 0)\n"
+            "• **Topics Mastered:** `0`\n"
+            "• **Study Streak:** `0 Days`\n"
+            "• **Study Time:** `0.0 Hours`\n\n"
+            "Ready to begin your journey anew? Run `/study log` or `/study quicklog` to record your first topic!"
+        ),
+        color=COLOR_WARNING
+    )
+    embed.set_footer(text="Fresh start initiated • Consistency beats talent")
+    return embed
+
+def create_session_logs_embed(
+    sessions: List[Dict[str, Any]],
+    total_count: int,
+    page: int,
+    display_name: str
+) -> discord.Embed:
+    """Format interactive paginated list of candidate study sessions with IDs."""
+    embed = discord.Embed(
+        title=f"📋 Study Log History: {display_name}",
+        description=f"Showing **{len(sessions)}** of **{total_count}** logged study sessions (Page {page + 1}):",
+        color=COLOR_PRIMARY
+    )
+
+    if not sessions:
+        embed.description = "ℹ️ No study logs found.\nRecord your daily study with `/study log` or `/study quicklog`!"
+        return embed
+
+    for s in sessions:
+        topics_str = ", ".join(s.get("topics", [])) or "General Session"
+        notes_preview = s.get("notes") or "*(No notes attached)*"
+        if len(notes_preview) > 150:
+            notes_preview = notes_preview[:145] + "..."
+
+        embed.add_field(
+            name=f"🆔 Log #{s['id']} • {s['session_date']} [{s.get('category', 'General')}] — {s.get('duration_minutes', 45)} mins",
+            value=(
+                f"• **Topics ({s.get('topics_count', 1)}):** {topics_str[:150]}\n"
+                f"• **Notes:** *{notes_preview}*\n"
+                f"• *To edit or delete:* `/study edit id:{s['id']}` or `/study delete id:{s['id']}`"
+            ),
+            inline=False
+        )
+
+    embed.set_footer(text="Use buttons below to browse • Edit/Delete any log with /study edit or /study delete")
+    return embed
+
+def create_export_ready_embed(summary: Dict[str, Any], display_name: str) -> discord.Embed:
+    """Format confirmation embed when an Excel report is exported."""
+    prof = summary["profile"]
+    rank_info = summary["rank_info"]
+    embed = discord.Embed(
+        title="📊 Study Report & Workbook Export Ready!",
+        description=(
+            f"**Candidate:** `{display_name}`\n"
+            f"**Rank:** {rank_info.get('icon', '🥉')} **{rank_info.get('title')}** (Level {rank_info.get('level', 1)})\n\n"
+            f"Your complete preparation document has been generated as a Microsoft Excel (`.xlsx`) file.\n"
+            f"Download the attachment below to view your full study history, session logs, notes archive, and analytics."
+        ),
+        color=COLOR_SUCCESS
+    )
+    embed.add_field(
+        name="📑 Included Worksheets",
+        value=(
+            "1. **📊 Overview & Scorecard**: Key performance indicators, rank, streaks, and achievements.\n"
+            "2. **📚 Study Logs**: Detailed chronological table of every session, duration, problems, and notes.\n"
+            "3. **📝 Topics & Notes Archive**: Complete technical topic inventory with revision summaries."
+        ),
+        inline=False
+    )
+    embed.set_footer(text="Excel workbook generated with openpyxl • Open with Excel, Google Sheets, or LibreOffice")
+    return embed
+
 def create_help_embed() -> discord.Embed:
     """Format updated Study Tracker help guide."""
     embed = discord.Embed(
         title="📚 Study Tracker Bot: Live Sessions, Topics, Notes & Leaderboards",
-        description="A streamlined daily technical interview study assistant. Track live study sessions, log topics, save notes, climb leaderboards, and avoid getting roasted!",
+        description="A comprehensive technical interview study assistant. Track live study sessions, log topics, manage/edit past logs, export Excel reports, climb leaderboards, and avoid getting roasted!",
         color=COLOR_PRIMARY
     )
 
@@ -373,12 +510,22 @@ def create_help_embed() -> discord.Embed:
     embed.add_field(
         name="📝 Daily Study & Multi-Topic Logging",
         value=(
-            "• `/study log <topics> [notes] [duration] [problems] [category]`\n"
-            "  *Log 1 or multiple numbered topics in a single command!*\n"
-            "  *Example:* `/study log topics:\"1. Factory Pattern 2. 0/1 Knapsack DP 3. Redis Caching\" notes:\"Learned LRU eviction\"`\n"
+            "• `/study log <topics> [notes] [duration] [problems] [category]` - Log 1 or multiple numbered topics\n"
             "• `/study quicklog` - Interactive multi-topic and notes popup modal\n"
-            "• `/study profile [user]` - View candidate rank, badges, hours, and statistics\n"
+            "• `/study profile [user]` - View candidate rank, badges, hours, and scorecard\n"
             "• `/study streak` - Check your active daily study streak"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🛠️ Manage, Edit, Delete & Export Logs",
+        value=(
+            "• `/study logs [user]` - Interactive paginated browser for all your logged sessions\n"
+            "• `/study edit <session_id>` - Interactive modal to update topics, notes, or minutes for a log\n"
+            "• `/study delete <session_id>` - Delete a mistakenly added study session\n"
+            "• `/study export` - Generate a styled Microsoft Excel (`.xlsx`) document of your study history\n"
+            "• `/study reset` - Reset all your study progress, streak, and badges (with confirmation)"
         ),
         inline=False
     )
@@ -404,7 +551,7 @@ def create_help_embed() -> discord.Embed:
     embed.add_field(
         name="🌶️ Sarcastic Roasts",
         value=(
-            "• `/roast [user]` - Drop a hilarious sarcastic roast on someone who skipped studying today\n"
+            "• `/roast [user]` - Drop a hilarious AI roast on someone who skipped studying today\n"
             "• *Automatic Daily Check:* If you don't log any topics for the day, expect a wake-up roast!"
         ),
         inline=False
@@ -412,3 +559,4 @@ def create_help_embed() -> discord.Embed:
 
     embed.set_footer(text="Consistency is key • Start today with /session start or /study quicklog")
     return embed
+

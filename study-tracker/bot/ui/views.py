@@ -10,7 +10,9 @@ from bot.ui.embeds import (
     create_leaderboard_embed,
     create_notes_list_embed,
     create_live_session_ended_embed,
-    create_live_session_status_embed
+    create_live_session_status_embed,
+    create_progress_reset_embed,
+    create_session_logs_embed
 )
 
 logger = logging.getLogger(__name__)
@@ -163,3 +165,95 @@ class LiveSessionControlView(discord.ui.View):
 
         embed = create_live_session_status_embed(session, interaction.user.display_name or interaction.user.name)
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class ConfirmResetView(discord.ui.View):
+    """Interactive confirmation dialog for resetting all candidate study progress."""
+
+    def __init__(self, discord_id: str, display_name: str):
+        super().__init__(timeout=60)
+        self.discord_id = discord_id
+        self.display_name = display_name
+
+    @discord.ui.button(label="⚠️ Yes, Reset All My Progress", style=discord.ButtonStyle.danger, custom_id="btn_confirm_reset")
+    async def btn_confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != str(self.discord_id):
+            await interaction.response.send_message("❌ This confirmation is not for you!", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        async with get_db() as db:
+            await topic_service.reset_user_progress(db=db, discord_id=self.discord_id)
+
+        embed = create_progress_reset_embed(self.display_name)
+        self.stop()
+        await interaction.edit_original_response(embed=embed, view=None)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="btn_cancel_reset")
+    async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != str(self.discord_id):
+            await interaction.response.send_message("❌ This confirmation is not for you!", ephemeral=True)
+            return
+
+        self.stop()
+        await interaction.response.edit_message(content="🛡️ **Reset cancelled.** Your study progress, streak, and badges remain intact.", embed=None, view=None)
+
+
+class SessionLogsPaginationView(discord.ui.View):
+    """Interactive pagination browser for reviewing candidate study logs."""
+
+    def __init__(
+        self,
+        discord_id: str,
+        display_name: str,
+        total_count: int,
+        page: int = 0,
+        page_size: int = 5
+    ):
+        super().__init__(timeout=180)
+        self.discord_id = discord_id
+        self.display_name = display_name
+        self.total_count = total_count
+        self.page = page
+        self.page_size = page_size
+        self._update_button_states()
+
+    def _update_button_states(self):
+        max_page = max(0, (self.total_count - 1) // self.page_size)
+        self.btn_prev.disabled = self.page <= 0
+        self.btn_next.disabled = self.page >= max_page
+
+    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary, custom_id="sess_prev")
+    async def btn_prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page > 0:
+            self.page -= 1
+            await self._update_page(interaction)
+
+    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary, custom_id="sess_next")
+    async def btn_next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        max_page = max(0, (self.total_count - 1) // self.page_size)
+        if self.page < max_page:
+            self.page += 1
+            await self._update_page(interaction)
+
+    async def _update_page(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        self._update_button_states()
+
+        async with get_db() as db:
+            offset = self.page * self.page_size
+            sessions, total = await topic_service.get_user_sessions_paginated(
+                db=db,
+                discord_id=self.discord_id,
+                limit=self.page_size,
+                offset=offset
+            )
+
+        embed = create_session_logs_embed(
+            sessions=sessions,
+            total_count=total,
+            page=self.page,
+            display_name=self.display_name
+        )
+        await interaction.edit_original_response(embed=embed, view=self)
+
