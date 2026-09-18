@@ -15,17 +15,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load .env manually if python-dotenv is not installed
 def load_env_file():
-    env_path = BASE_DIR / ".env"
-    if env_path.exists():
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, _, val = line.partition("=")
-                    if key.strip() not in os.environ:
-                        os.environ[key.strip()] = val.strip().strip("'\"")
+    for env_path in [BASE_DIR / ".env", BASE_DIR.parent / ".env"]:
+        if env_path.exists():
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, _, val = line.partition("=")
+                        k = key.strip()
+                        v = val.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
 
 load_env_file()
+
+# Resolve relative GOOGLE_APPLICATION_CREDENTIALS if specified
+if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+    cred_path = Path(os.environ["GOOGLE_APPLICATION_CREDENTIALS"])
+    if not cred_path.is_absolute():
+        for candidate in [BASE_DIR / cred_path, BASE_DIR.parent / cred_path]:
+            if candidate.exists():
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(candidate.resolve())
+                break
 
 def _generate_default_key() -> str:
     if _HAS_FERNET:
@@ -39,12 +50,15 @@ class Settings:
     DISCORD_GUILD_ID: Optional[str] = os.getenv("DISCORD_GUILD_ID", None)
 
     # Gemini & Google Cloud Vertex AI Configuration
-    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", os.getenv("VERTEX_API_KEY", os.getenv("GOOGLE_API_KEY", None)))
-    VERTEX_API_KEY: Optional[str] = os.getenv("VERTEX_API_KEY", None)
-    GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", os.getenv("GOOGLE_CLOUD_PROJECT", "seraphic-rune-366616"))
-    GCP_LOCATION: str = os.getenv("GCP_LOCATION", os.getenv("VERTEX_LOCATION", "us-central1"))
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    AI_PROVIDER: str = os.getenv("AI_PROVIDER", "auto")  # "auto", "gemini", "vertex", "openrouter"
+    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY") or os.getenv("VERTEX_API_KEY") or os.getenv("GOOGLE_API_KEY") or None
+    VERTEX_API_KEY: Optional[str] = os.getenv("VERTEX_API_KEY") or None
+    GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or None
+    GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT") or "seraphic-rune-366616"
+    GCP_LOCATION: str = os.getenv("GCP_LOCATION") or os.getenv("VERTEX_LOCATION") or "us-central1"
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
+    AI_PROVIDER: str = os.getenv("AI_PROVIDER") or "auto"  # "auto", "gemini", "vertex", "openrouter"
+
+
 
     # OpenRouter Integration
     OPENROUTER_API_KEY: Optional[str] = os.getenv("OPENROUTER_API_KEY", None)

@@ -115,10 +115,12 @@ class StudyTrackerAIService:
     ) -> Optional[str]:
         """Executes AI completion with automatic Gemini/Vertex AI and OpenRouter fallback."""
         key = self.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("VERTEX_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        if (self.ai_provider in ("gemini", "vertex", "auto") and key and not key.startswith("your_")) or self.ai_provider in ("gemini", "vertex"):
+        has_credentials = bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or (key and not key.startswith("your_")))
+        if (self.ai_provider in ("gemini", "vertex", "auto") and has_credentials) or self.ai_provider in ("gemini", "vertex"):
             gemini_res = await self.call_gemini(prompt, system_prompt=system_prompt, model=model, temperature=temperature)
             if gemini_res:
                 return gemini_res
+
 
         # OpenRouter fallback
         if self.api_key and not self.api_key.startswith("your_"):
